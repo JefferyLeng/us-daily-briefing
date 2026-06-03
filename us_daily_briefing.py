@@ -58,6 +58,54 @@ DEFAULT_CHINESE_ADRS = {
     "IQ": "爱奇艺", "TAL": "好未来", "EDU": "新东方",
 }
 
+# 英文板块 → 中文
+SECTOR_CN = {
+    "Technology": "科技", "Healthcare": "医疗保健",
+    "Financial Services": "金融服务", "Consumer Cyclical": "可选消费",
+    "Consumer Defensive": "必需消费", "Energy": "能源",
+    "Industrials": "工业", "Basic Materials": "基础材料",
+    "Communication Services": "通信服务", "Utilities": "公用事业",
+    "Real Estate": "房地产", "Financial": "金融",
+    "Health Care": "医疗保健", "Consumer Discretionary": "可选消费",
+    "Consumer Staples": "必需消费", "Materials": "材料",
+}
+
+# 热门美股中文名映射
+STOCK_CN = {
+    "AAPL": "苹果", "MSFT": "微软", "GOOGL": "谷歌", "GOOG": "谷歌",
+    "AMZN": "亚马逊", "NVDA": "英伟达", "META": "Meta", "TSLA": "特斯拉",
+    "BRK-B": "伯克希尔", "JPM": "摩根大通", "V": "Visa", "UNH": "联合健康",
+    "MA": "万事达", "HD": "家得宝", "DIS": "迪士尼", "NFLX": "奈飞",
+    "PYPL": "PayPal", "BAC": "美国银行", "INTC": "英特尔", "AMD": "AMD",
+    "CSCO": "思科", "ADBE": "Adobe", "CRM": "Salesforce", "ORCL": "甲骨文",
+    "IBM": "IBM", "QCOM": "高通", "TXN": "德州仪器", "AVGO": "博通",
+    "MU": "美光", "AMAT": "应用材料", "LRCX": "泛林半导体", "KLAC": "科磊",
+    "MRVL": "Marvell", "COHR": "Coherent", "WOLF": "Wolfspeed",
+    "MRVL": "迈威尔", "ON": "安森美", "MCHP": "微芯科技",
+    "SBUX": "星巴克", "NKE": "耐克", "MCD": "麦当劳", "BA": "波音",
+    "CAT": "卡特彼勒", "GE": "通用电气", "KO": "可口可乐", "PEP": "百事",
+    "WMT": "沃尔玛", "COST": "好市多", "TGT": "Target", "CVS": "CVS健康",
+    "CVX": "雪佛龙", "XOM": "埃克森美孚", "COP": "康菲石油",
+    "PFE": "辉瑞", "JNJ": "强生", "MRK": "默克", "ABBV": "艾伯维",
+    "LLY": "礼来", "TMO": "赛默飞", "ABT": "雅培",
+    "UBER": "Uber", "LYFT": "Lyft", "SNAP": "Snap",
+    "SHOP": "Shopify", "SQ": "Block", "ROKU": "Roku",
+    "HPE": "惠普企业", "DELL": "戴尔", "HPQ": "惠普",
+    "ARM": "ARM", "PLTR": "Palantir", "CRWD": "CrowdStrike",
+    "SNOW": "Snowflake", "DDOG": "Datadog", "NET": "Cloudflare",
+    "ABNB": "爱彼迎", "RIVN": "Rivian", "LCID": "Lucid",
+    "SOFI": "SoFi", "HOOD": "Robinhood", "COIN": "Coinbase",
+    "AI": "C3.ai", "OPEN": "Opendoor", "RBLX": "Roblox",
+    "LEGN": "传奇生物", "PENG": "Penguin", "AEHR": "Aehr Test",
+    "MSTR": "MicroStrategy", "TTD": "The Trade Desk",
+    "CAMT": "Camtek", "STM": "意法半导体",
+    "FIG": "Figma", "HIMS": "Hims & Hers",
+    "IONQ": "IonQ", "RKLB": "Rocket Lab",
+    "CELC": "Celcuity", "PRAX": "Praxis", "KOD": "Kodiak",
+    "XMTR": "Xometry", "KYMR": "Kymera", "ABVX": "Abivax",
+    "TE": "T1 Energy", "BRAI": "Braiin",
+}
+
 # ---- 配置 ----
 
 def load_config(path=None):
@@ -164,11 +212,31 @@ def _parse_screener_quote(q):
     return {
         "symbol": symbol,
         "name": name,
+        "cn_name": STOCK_CN.get(symbol, ""),
+        "sector": "",
         "price": round(float(price), 2) if price else 0,
         "change_pct": round(float(change_pct), 2) if change_pct else 0,
         "volume": int(volume) if volume else 0,
         "market_cap": int(market_cap) if market_cap else 0,
     }
+
+
+def _enrich_sector_info(stocks):
+    """批量获取个股板块信息"""
+    if not stocks:
+        return
+    symbols = [s["symbol"] for s in stocks]
+    for symbol in symbols:
+        try:
+            info = yf.Ticker(symbol).info
+            sector_en = info.get("sector", "")
+            sector_cn = SECTOR_CN.get(sector_en, sector_en)
+            for s in stocks:
+                if s["symbol"] == symbol:
+                    s["sector"] = sector_cn
+                    break
+        except Exception as e:
+            log.warning("获取 %s 板块信息失败: %s", symbol, e)
 
 
 def fetch_chinese_adrs(adr_map):
@@ -264,11 +332,11 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
     if gainers:
         lines = ["**🚀 涨幅 Top 10**\n"]
         for i, s in enumerate(gainers, 1):
-            vol_str = _fmt_volume(s["volume"])
-            cap_str = _fmt_cap(s["market_cap"])
+            cn = f"({s['cn_name']})" if s.get("cn_name") else ""
+            sector = f"[{s['sector']}]" if s.get("sector") else ""
             lines.append(
-                f"{i}. {s['name']}({s['symbol']})  ${s['price']:.2f}  "
-                f"{_fmt_pct(s['change_pct'])}  Vol:{vol_str}  Cap:{cap_str}"
+                f"{i}. {s['name']}{cn}({s['symbol']}) {sector}  "
+                f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
             )
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
     else:
@@ -280,11 +348,11 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
     if losers:
         lines = ["**📉 跌幅 Top 10**\n"]
         for i, s in enumerate(losers, 1):
-            vol_str = _fmt_volume(s["volume"])
-            cap_str = _fmt_cap(s["market_cap"])
+            cn = f"({s['cn_name']})" if s.get("cn_name") else ""
+            sector = f"[{s['sector']}]" if s.get("sector") else ""
             lines.append(
-                f"{i}. {s['name']}({s['symbol']})  ${s['price']:.2f}  "
-                f"{_fmt_pct(s['change_pct'])}  Vol:{vol_str}  Cap:{cap_str}"
+                f"{i}. {s['name']}{cn}({s['symbol']}) {sector}  "
+                f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
             )
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
     else:
@@ -391,6 +459,9 @@ def main():
     try:
         gainers, losers = fetch_top_gainers_losers(size=10)
         log.info("涨幅: %d, 跌幅: %d", len(gainers), len(losers))
+        if gainers or losers:
+            log.info("补充板块信息...")
+            _enrich_sector_info(gainers + losers)
     except Exception as e:
         log.error("获取涨跌幅排行失败: %s", e)
 
