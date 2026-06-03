@@ -72,38 +72,91 @@ SECTOR_CN = {
 
 # 热门美股中文名映射
 STOCK_CN = {
+    # 科技巨头
     "AAPL": "苹果", "MSFT": "微软", "GOOGL": "谷歌", "GOOG": "谷歌",
-    "AMZN": "亚马逊", "NVDA": "英伟达", "META": "Meta", "TSLA": "特斯拉",
-    "BRK-B": "伯克希尔", "JPM": "摩根大通", "V": "Visa", "UNH": "联合健康",
-    "MA": "万事达", "HD": "家得宝", "DIS": "迪士尼", "NFLX": "奈飞",
-    "PYPL": "PayPal", "BAC": "美国银行", "INTC": "英特尔", "AMD": "AMD",
-    "CSCO": "思科", "ADBE": "Adobe", "CRM": "Salesforce", "ORCL": "甲骨文",
-    "IBM": "IBM", "QCOM": "高通", "TXN": "德州仪器", "AVGO": "博通",
-    "MU": "美光", "AMAT": "应用材料", "LRCX": "泛林半导体", "KLAC": "科磊",
-    "MRVL": "Marvell", "COHR": "Coherent", "WOLF": "Wolfspeed",
-    "MRVL": "迈威尔", "ON": "安森美", "MCHP": "微芯科技",
-    "SBUX": "星巴克", "NKE": "耐克", "MCD": "麦当劳", "BA": "波音",
-    "CAT": "卡特彼勒", "GE": "通用电气", "KO": "可口可乐", "PEP": "百事",
-    "WMT": "沃尔玛", "COST": "好市多", "TGT": "Target", "CVS": "CVS健康",
+    "AMZN": "亚马逊", "NVDA": "英伟达", "META": "Meta Platforms", "TSLA": "特斯拉",
+    "BRK-B": "伯克希尔", "BRK.B": "伯克希尔",
+    # 金融
+    "JPM": "摩根大通", "BAC": "美国银行", "WFC": "富国银行", "GS": "高盛",
+    "MS": "摩根士丹利", "C": "花旗", "BLK": "贝莱德", "SCHW": "嘉信理财",
+    "AXP": "美国运通", "V": "Visa", "MA": "万事达", "PYPL": "PayPal",
+    "COIN": "Coinbase", "HOOD": "Robinhood", "SOFI": "SoFi",
+    # 医疗保健
+    "UNH": "联合健康", "JNJ": "强生", "PFE": "辉瑞", "ABBV": "艾伯维",
+    "MRK": "默克", "LLY": "礼来", "TMO": "赛默飞", "ABT": "雅培",
+    "MRNA": "Moderna", "GILD": "吉利德", "AMGN": "安进", "REGN": "再生元",
+    "VRTX": "福泰制药", "BIIB": "百健", "DHR": "丹纳赫", "ISRG": "直觉外科",
+    "LEGN": "传奇生物", "AZN": "阿斯利康", "NVO": "诺和诺德",
+    "SNPS": "新思科技", "CDNS": "楷登电子",
+    "CELC": "Celcuity", "PRAX": "Praxis Precision", "KOD": "Kodiak Sciences",
+    "KYMR": "Kymera Therapeutics", "ABVX": "Abivax", "VKTX": "Viking Therapeutics",
+    "DNA": "Ginkgo Bioworks", "RXRX": "Recursion Pharma",
+    # 半导体
+    "INTC": "英特尔", "AMD": "超微半导体", "AVGO": "博通", "QCOM": "高通",
+    "TXN": "德州仪器", "MU": "美光", "AMAT": "应用材料", "LRCX": "泛林半导体",
+    "KLAC": "科磊", "MRVL": "迈威尔科技", "ON": "安森美", "MCHP": "微芯科技",
+    "NXPI": "恩智浦", "STM": "意法半导体", "WOLF": "Wolfspeed", "COHR": "相干公司",
+    "AEHR": "Aehr Test Systems", "CAMT": "Camtek", "PENG": "Penguin Solutions",
+    "ARM": "ARM Holdings", "ASML": "ASML", "SNPS": "新思科技",
+    "MPWR": "Monolithic Power", "SWKS": "Skyworks",
+    "TER": "泰瑞达", "ENTG": "Entegris", "UCTT": "Ultra Clean",
+    "LSCC": "Lattice Semiconductor", "RMBS": "Rambus",
+    # 软件/云
+    "ADBE": "Adobe", "CRM": "Salesforce", "ORCL": "甲骨文", "IBM": "IBM",
+    "NOW": "ServiceNow", "INTU": "Intuit", "SNOW": "Snowflake",
+    "PLTR": "Palantir", "CRWD": "CrowdStrike", "DDOG": "Datadog",
+    "NET": "Cloudflare", "MDB": "MongoDB", "ZS": "Zscaler",
+    "PANW": "Palo Alto Networks", "FTNT": "Fortinet",
+    "OKTA": "Okta", "TTD": "The Trade Desk", "PATH": "UiPath",
+    "FIG": "Figma", "SHOP": "Shopify", "SQ": "Block",
+    "RNG": "RingCentral", "HUBS": "HubSpot", "DOCU": "DocuSign",
+    "TEAM": "Atlassian", "WDAY": "Workday", "VEEV": "Veeva Systems",
+    # 消费
+    "AMZN": "亚马逊", "TSLA": "特斯拉", "HD": "家得宝", "NKE": "耐克",
+    "MCD": "麦当劳", "SBUX": "星巴克", "DIS": "迪士尼", "NFLX": "奈飞",
+    "KO": "可口可乐", "PEP": "百事", "WMT": "沃尔玛", "COST": "好市多",
+    "TGT": "Target", "CVS": "CVS健康", "ABNB": "爱彼迎", "UBER": "Uber",
+    "LYFT": "Lyft", "RIVN": "Rivian", "LCID": "Lucid Motors",
+    "RBLX": "Roblox", "SNAP": "Snap", "ROKU": "Roku", "BABA": "阿里巴巴",
+    "PINS": "Pinterest", "ETSY": "Etsy", "CHWY": "Chewy",
+    "LULU": "Lululemon", "TJX": "TJX", "LOW": "Lowe's",
+    # 能源
     "CVX": "雪佛龙", "XOM": "埃克森美孚", "COP": "康菲石油",
-    "PFE": "辉瑞", "JNJ": "强生", "MRK": "默克", "ABBV": "艾伯维",
-    "LLY": "礼来", "TMO": "赛默飞", "ABT": "雅培",
-    "UBER": "Uber", "LYFT": "Lyft", "SNAP": "Snap",
-    "SHOP": "Shopify", "SQ": "Block", "ROKU": "Roku",
+    "SLB": "斯伦贝谢", "EOG": "EOG能源", "OXY": "西方石油",
+    "MPC": "Marathon Petroleum", "VLO": "Valero能源",
+    "FANG": "Diamondback Energy", "TE": "T1 Energy",
+    "ENPH": "Enphase Energy", "SEDG": "SolarEdge", "RUN": "Sunrun",
+    # 工业
+    "BA": "波音", "CAT": "卡特彼勒", "GE": "通用电气", "HON": "霍尼韦尔",
+    "UNP": "联合太平洋", "RTX": "雷神技术", "LMT": "洛克希德马丁",
+    "DE": "迪尔", "MMM": "3M", "UPS": "UPS", "FDX": "联邦快递",
+    "EMR": "艾默生电气", "ETN": "伊顿", "PH": "Parker Hannifin",
+    # 通信
+    "TMUS": "T-Mobile", "T": "AT&T", "VZ": "Verizon",
+    "WBD": "华纳兄弟探索", "PARA": "派拉蒙", "CMCSA": "康卡斯特",
+    # 硬件/设备
     "HPE": "惠普企业", "DELL": "戴尔", "HPQ": "惠普",
-    "ARM": "ARM", "PLTR": "Palantir", "CRWD": "CrowdStrike",
-    "SNOW": "Snowflake", "DDOG": "Datadog", "NET": "Cloudflare",
-    "ABNB": "爱彼迎", "RIVN": "Rivian", "LCID": "Lucid",
-    "SOFI": "SoFi", "HOOD": "Robinhood", "COIN": "Coinbase",
-    "AI": "C3.ai", "OPEN": "Opendoor", "RBLX": "Roblox",
-    "LEGN": "传奇生物", "PENG": "Penguin", "AEHR": "Aehr Test",
-    "MSTR": "MicroStrategy", "TTD": "The Trade Desk",
-    "CAMT": "Camtek", "STM": "意法半导体",
-    "FIG": "Figma", "HIMS": "Hims & Hers",
-    "IONQ": "IonQ", "RKLB": "Rocket Lab",
-    "CELC": "Celcuity", "PRAX": "Praxis", "KOD": "Kodiak",
-    "XMTR": "Xometry", "KYMR": "Kymera", "ABVX": "Abivax",
-    "TE": "T1 Energy", "BRAI": "Braiin",
+    "APH": "安费诺", "GLW": "康宁",
+    # 其他热门
+    "MSTR": "MicroStrategy", "AI": "C3.ai",
+    "IONQ": "IonQ", "RKLB": "Rocket Lab", "OPEN": "Opendoor",
+    "HIMS": "Hims & Hers", "BRAI": "Braiin", "XMTR": "Xometry",
+    "AFRM": "Affirm", "UPST": "Upstart", "RBLX": "Roblox",
+    "S": "SentinelOne", "CRCT": "Cricut",
+    "NNOX": "Nano Dimension", "JOBY": "Joby Aviation",
+    "LUNR": "Intuitive Machines", "ASTS": "AST SpaceMobile",
+    "RKLB": "Rocket Lab", "RDW": "Redwire",
+    "KC": "Kingsoft Cloud", "DIDI": "滴滴",
+    "GRRR": "Gorilla Technology", "SERV": "Serve Robotics",
+    "MARA": "Marathon Digital", "RIOT": "Riot Platforms",
+    "CLSK": "CleanSpark", "BTBT": "Bit Digital",
+    "SMCI": "超微电脑", "DELL": "戴尔",
+    "BKKT": "Bakkt Holdings", "HOLO": "MicroCloud Hologram",
+    "OPTT": "Ocean Power Tech", "ARVL": "Arrival",
+    "SOUN": "SoundHound AI", "BBAI": "BigBear.ai",
+    "LTRN": " Lantern Pharma", "PTON": "Peloton",
+    "ZIM": "以星航运", "SITM": "SiTime",
+    "ALRM": "Alarm.com", "AVTE": "Aviat Networks",
 }
 
 # ---- 配置 ----
@@ -203,7 +256,7 @@ def fetch_top_gainers_losers(size=10):
 def _parse_screener_quote(q):
     """解析 Screener 返回的个股数据"""
     symbol = q.get("symbol", "")
-    name = q.get("shortName") or q.get("longName") or symbol
+    display = q.get("displayName") or q.get("shortName") or symbol
     price = q.get("regularMarketPrice", 0)
     change_pct = q.get("regularMarketChangePercent", 0)
     volume = q.get("regularMarketVolume", 0)
@@ -211,8 +264,8 @@ def _parse_screener_quote(q):
 
     return {
         "symbol": symbol,
-        "name": name,
         "cn_name": STOCK_CN.get(symbol, ""),
+        "display_name": display,
         "sector": "",
         "price": round(float(price), 2) if price else 0,
         "change_pct": round(float(change_pct), 2) if change_pct else 0,
@@ -332,10 +385,10 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
     if gainers:
         lines = ["**🚀 涨幅 Top 20**\n"]
         for i, s in enumerate(gainers, 1):
-            cn = f"({s['cn_name']})" if s.get("cn_name") else ""
+            name = s["cn_name"] if s.get("cn_name") else s["display_name"]
             sector = f"[{s['sector']}]" if s.get("sector") else ""
             lines.append(
-                f"{i}. {s['name']}{cn}({s['symbol']}) {sector}  "
+                f"{i}. {name}({s['symbol']}) {sector}  "
                 f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
             )
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
@@ -348,10 +401,10 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
     if losers:
         lines = ["**📉 跌幅 Top 20**\n"]
         for i, s in enumerate(losers, 1):
-            cn = f"({s['cn_name']})" if s.get("cn_name") else ""
+            name = s["cn_name"] if s.get("cn_name") else s["display_name"]
             sector = f"[{s['sector']}]" if s.get("sector") else ""
             lines.append(
-                f"{i}. {s['name']}{cn}({s['symbol']}) {sector}  "
+                f"{i}. {name}({s['symbol']}) {sector}  "
                 f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
             )
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
