@@ -67,10 +67,7 @@ STORAGE_STOCKS = {
 CPO_STOCKS = {
     "LITE": "Lumentum", "FN": "Fabrinet", "COHR": "相干公司",
     "MRVL": "迈威尔科技", "AVGO": "博通", "GLW": "康宁",
-    "AAOI": "Applied Optoelectronics", "IPG": "IPG Photonics",
-    "NPTN": "NeoPhotonics", "OCLR": "Oclaro",
-    "FNSR": "Finisar", "ACMR": "ACM Research",
-    "WKEY": "WiKey", "POET": "POET Technologies",
+    "AAOI": "Applied Optoelectronics", "ACMR": "ACM Research",
 }
 
 DEFAULT_CHINESE_ADRS = {
