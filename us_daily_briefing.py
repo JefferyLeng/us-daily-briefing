@@ -49,6 +49,20 @@ SECTOR_ETFS = {
     "XLC": "通信",
 }
 
+# 风向标股票
+BELLWETHERS = {
+    "AAPL": "苹果", "MSFT": "微软", "AMZN": "亚马逊", "GOOGL": "谷歌",
+    "META": "Meta", "NVDA": "英伟达", "TSLA": "特斯拉", "LITE": "Lumentum",
+    "MRVL": "迈威尔", "GLW": "康宁", "AVGO": "博通",
+}
+
+# 存储概念股
+STORAGE_STOCKS = {
+    "MU": "美光科技", "WDC": "西部数据", "STX": "希捷",
+    "PSTG": "Pure Storage", "NTAP": "NetApp", "SIMO": "Silicon Motion",
+    "SMCI": "超微电脑",
+}
+
 DEFAULT_CHINESE_ADRS = {
     "BABA": "阿里巴巴", "JD": "京东", "PDD": "拼多多",
     "BIDU": "百度", "NIO": "蔚来", "LI": "理想汽车",
@@ -321,6 +335,35 @@ def fetch_chinese_adrs(adr_map):
     results.sort(key=lambda x: x["change_pct"], reverse=True)
     return results
 
+
+def fetch_stock_group(name_map):
+    """通用：获取一组股票的当日涨跌"""
+    tickers = list(name_map.keys())
+    data = yf.download(tickers, period="5d", progress=False, auto_adjust=True)
+    if data.empty:
+        return None
+
+    results = []
+    for ticker in tickers:
+        name = name_map.get(ticker, ticker)
+        try:
+            close = data["Close"][ticker].dropna()
+            if len(close) < 2:
+                continue
+            last = close.iloc[-1]
+            prev = close.iloc[-2]
+            change_pct = (last - prev) / prev * 100
+            results.append({
+                "name": name,
+                "ticker": ticker,
+                "close": round(last, 2),
+                "change_pct": round(change_pct, 2),
+            })
+        except Exception as e:
+            log.warning("获取 %s(%s) 失败: %s", name, ticker, e)
+
+    return results
+
 # ---- 格式化 ----
 
 def _fmt_pct(pct):
@@ -354,7 +397,12 @@ def _fmt_cap(cap):
     return str(cap)
 
 
-def build_feishu_card(indices, sectors, gainers, losers, adrs):
+def _fmt_stock_line(s):
+    """格式化单只股票行：中文名(代码) $价格 涨跌幅"""
+    return f"{s['name']}({s['ticker']})  ${s['close']:.2f}  {_fmt_pct(s['change_pct'])}"
+
+
+def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage):
     """构建飞书交互式卡片消息"""
     today = datetime.now().strftime("%Y-%m-%d")
     elements = []
@@ -417,10 +465,32 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
     if adrs:
         lines = ["**🇨🇳 中概股行情**\n"]
         for s in adrs:
-            lines.append(f"{s['name']}({s['ticker']})  ${s['close']:.2f}  {_fmt_pct(s['change_pct'])}")
+            lines.append(_fmt_stock_line(s))
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
     else:
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🇨🇳 中概股行情** — 数据暂不可用"}})
+
+    elements.append({"tag": "hr"})
+
+    # 风向标
+    if bellwethers:
+        lines = ["**🧭 风向标**\n"]
+        for s in bellwethers:
+            lines.append(_fmt_stock_line(s))
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
+    else:
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🧭 风向标** — 数据暂不可用"}})
+
+    elements.append({"tag": "hr"})
+
+    # 存储概念股
+    if storage:
+        lines = ["**💾 存储概念股**\n"]
+        for s in storage:
+            lines.append(_fmt_stock_line(s))
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
+    else:
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**💾 存储概念股** — 数据暂不可用"}})
 
     # 页脚
     elements.append({"tag": "hr"})
@@ -525,8 +595,22 @@ def main():
     except Exception as e:
         log.error("获取中概股数据失败: %s", e)
 
+    bellwethers = None
+    try:
+        bellwethers = fetch_stock_group(BELLWETHERS)
+        log.info("风向标数据: %d 条", len(bellwethers) if bellwethers else 0)
+    except Exception as e:
+        log.error("获取风向标数据失败: %s", e)
+
+    storage = None
+    try:
+        storage = fetch_stock_group(STORAGE_STOCKS)
+        log.info("存储概念股数据: %d 条", len(storage) if storage else 0)
+    except Exception as e:
+        log.error("获取存储概念股数据失败: %s", e)
+
     # 构建卡片
-    card = build_feishu_card(indices, sectors, gainers, losers, adrs)
+    card = build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage)
 
     if args.dry_run:
         print("\n" + "=" * 60)
