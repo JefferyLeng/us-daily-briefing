@@ -1,0 +1,59 @@
+name: HK Stock Daily Briefing
+
+on:
+  schedule:
+    # 上午收盘 12:05 HKT = 04:05 UTC
+    - cron: '5 4 * * 1-5'
+    # 下午收盘 16:05 HKT = 08:05 UTC
+    - cron: '5 8 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      session:
+        description: 'morning or afternoon'
+        required: false
+        default: 'afternoon'
+
+jobs:
+  send-briefing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Determine session
+        id: session
+        run: |
+          if [ -n "${{ github.event.inputs.session }}" ]; then
+            echo "session=${{ github.event.inputs.session }}" >> $GITHUB_OUTPUT
+          else
+            # 根据触发时间判断：04:05 UTC = 上午, 08:05 UTC = 下午
+            HOUR=$(date -u +%H)
+            if [ "$HOUR" -lt 6 ]; then
+              echo "session=morning" >> $GITHUB_OUTPUT
+            else
+              echo "session=afternoon" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Run HK briefing script
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          python3 -c "
+          import json, os
+          cfg = {}
+          if os.path.exists('config.json'):
+              with open('config.json', 'r') as f:
+                  cfg = json.load(f)
+          cfg['feishu_webhook_url'] = os.environ['FEISHU_WEBHOOK_URL']
+          with open('config.json', 'w') as f:
+              json.dump(cfg, f, ensure_ascii=False, indent=2)
+          "
+          python3 hk_daily_briefing.py --force --session ${{ steps.session.outputs.session }}
