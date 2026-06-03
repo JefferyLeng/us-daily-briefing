@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(python3 -c \"import yfinance; print\\(yfinance.__version__\\)\")",
+      "Bash(python3 -c \"import yfinance\")",
+      "Bash(chmod +x *)",
+      "Bash(pip3 install *)",
+      "Bash(python3 *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git remote *)",
+      "Bash(git branch *)"
+    ]
+  }
+}
