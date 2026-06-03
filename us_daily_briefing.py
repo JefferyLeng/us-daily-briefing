@@ -63,6 +63,16 @@ STORAGE_STOCKS = {
     "SMCI": "超微电脑",
 }
 
+# CPO 概念股（光电共封装）
+CPO_STOCKS = {
+    "LITE": "Lumentum", "FN": "Fabrinet", "COHR": "相干公司",
+    "MRVL": "迈威尔科技", "AVGO": "博通", "GLW": "康宁",
+    "AAOI": "Applied Optoelectronics", "IPG": "IPG Photonics",
+    "NPTN": "NeoPhotonics", "OCLR": "Oclaro",
+    "FNSR": "Finisar", "ACMR": "ACM Research",
+    "WKEY": "WiKey", "POET": "POET Technologies",
+}
+
 DEFAULT_CHINESE_ADRS = {
     "BABA": "阿里巴巴", "JD": "京东", "PDD": "拼多多",
     "BIDU": "百度", "NIO": "蔚来", "LI": "理想汽车",
@@ -402,7 +412,7 @@ def _fmt_stock_line(s):
     return f"{s['name']}({s['ticker']})  ${s['close']:.2f}  {_fmt_pct(s['change_pct'])}"
 
 
-def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage):
+def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo):
     """构建飞书交互式卡片消息"""
     today = datetime.now().strftime("%Y-%m-%d")
     elements = []
@@ -491,6 +501,17 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, stor
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
     else:
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**💾 存储概念股** — 数据暂不可用"}})
+
+    elements.append({"tag": "hr"})
+
+    # CPO 概念股
+    if cpo:
+        lines = ["**🔗 CPO概念股（光电共封装）**\n"]
+        for s in cpo:
+            lines.append(_fmt_stock_line(s))
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
+    else:
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🔗 CPO概念股** — 数据暂不可用"}})
 
     # 页脚
     elements.append({"tag": "hr"})
@@ -609,8 +630,15 @@ def main():
     except Exception as e:
         log.error("获取存储概念股数据失败: %s", e)
 
+    cpo = None
+    try:
+        cpo = fetch_stock_group(CPO_STOCKS)
+        log.info("CPO概念股数据: %d 条", len(cpo) if cpo else 0)
+    except Exception as e:
+        log.error("获取CPO概念股数据失败: %s", e)
+
     # 构建卡片
-    card = build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage)
+    card = build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo)
 
     if args.dry_run:
         print("\n" + "=" * 60)
