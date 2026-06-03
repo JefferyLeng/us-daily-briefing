@@ -385,10 +385,10 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
     if gainers:
         lines = ["**🚀 涨幅 Top 20**\n"]
         for i, s in enumerate(gainers, 1):
-            name = s["cn_name"] if s.get("cn_name") else s["display_name"]
-            sector = f"[{s['sector']}]" if s.get("sector") else ""
+            cn = f" {s['cn_name']}" if s.get("cn_name") else ""
+            sector = f" [{s['sector']}]" if s.get("sector") else ""
             lines.append(
-                f"{i}. {name}({s['symbol']}) {sector}  "
+                f"{i}. {s['display_name']}({s['symbol']}){cn}{sector}  "
                 f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
             )
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
@@ -401,10 +401,10 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
     if losers:
         lines = ["**📉 跌幅 Top 20**\n"]
         for i, s in enumerate(losers, 1):
-            name = s["cn_name"] if s.get("cn_name") else s["display_name"]
-            sector = f"[{s['sector']}]" if s.get("sector") else ""
+            cn = f" {s['cn_name']}" if s.get("cn_name") else ""
+            sector = f" [{s['sector']}]" if s.get("sector") else ""
             lines.append(
-                f"{i}. {name}({s['symbol']}) {sector}  "
+                f"{i}. {s['display_name']}({s['symbol']}){cn}{sector}  "
                 f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
             )
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
