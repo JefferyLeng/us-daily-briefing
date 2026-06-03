@@ -330,7 +330,7 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
 
     # 涨幅个股
     if gainers:
-        lines = ["**🚀 涨幅 Top 10**\n"]
+        lines = ["**🚀 涨幅 Top 20**\n"]
         for i, s in enumerate(gainers, 1):
             cn = f"({s['cn_name']})" if s.get("cn_name") else ""
             sector = f"[{s['sector']}]" if s.get("sector") else ""
@@ -346,7 +346,7 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs):
 
     # 跌幅个股
     if losers:
-        lines = ["**📉 跌幅 Top 10**\n"]
+        lines = ["**📉 跌幅 Top 20**\n"]
         for i, s in enumerate(losers, 1):
             cn = f"({s['cn_name']})" if s.get("cn_name") else ""
             sector = f"[{s['sector']}]" if s.get("sector") else ""
@@ -457,7 +457,7 @@ def main():
 
     gainers, losers = [], []
     try:
-        gainers, losers = fetch_top_gainers_losers(size=10)
+        gainers, losers = fetch_top_gainers_losers(size=20)
         log.info("涨幅: %d, 跌幅: %d", len(gainers), len(losers))
         if gainers or losers:
             log.info("补充板块信息...")
