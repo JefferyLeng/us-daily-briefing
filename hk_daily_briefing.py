@@ -28,9 +28,10 @@ log = logging.getLogger(__name__)
 
 # ---- 常量 ----
 
-# 港股主要指数（仅 Yahoo Finance 支持的真实指数）
+# 港股主要指数
 HK_INDICES = {
     "^HSI": "恒生指数",
+    "513180.SS": "恒生科技ETF",
 }
 
 # 板块代表性股票（每组计算平均涨跌幅）
