@@ -1,11 +1,6 @@
 name: HK Stock Daily Briefing
 
 on:
-  schedule:
-    # 上午收盘 12:05 HKT = 04:05 UTC
-    - cron: '5 4 * * 1-5'
-    # 下午收盘 16:05 HKT = 08:05 UTC
-    - cron: '5 8 * * 1-5'
   workflow_dispatch:
     inputs:
       session:
