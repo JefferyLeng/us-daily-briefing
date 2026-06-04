@@ -7,7 +7,7 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -411,7 +411,7 @@ def _fmt_stock_line(s):
 
 def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo):
     """构建飞书交互式卡片消息"""
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
     elements = []
 
     # 大盘指数
@@ -512,10 +512,10 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, stor
 
     # 页脚
     elements.append({"tag": "hr"})
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    now_str = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
     elements.append({
         "tag": "div",
-        "text": {"tag": "lark_md", "content": f"数据来源: Yahoo Finance | 生成时间: {now_str}"},
+        "text": {"tag": "lark_md", "content": f"生成时间: {now_str}"},
     })
 
     card = {
@@ -570,7 +570,7 @@ def main():
     webhook_url = config.get("feishu_webhook_url", "")
 
     # 周末检查
-    if not args.force and datetime.now().weekday() >= 5:
+    if not args.force and datetime.now(timezone(timedelta(hours=8))).weekday() >= 5:
         log.info("今天不是交易日（周末），跳过。使用 --force 强制运行。")
         return
 
