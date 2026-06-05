@@ -131,27 +131,32 @@ def _fmt_pct(pct):
 # ---- 数据获取 ----
 
 def fetch_indices():
-    """获取港股主要指数（逐个下载，避免合并下载失败）"""
+    """获取港股主要指数（逐个下载，含重试）"""
     results = []
     for ticker, name in HK_INDICES.items():
-        try:
-            data = yf.download(ticker, period="5d", progress=False, auto_adjust=True)
-            if data.empty:
-                log.warning("指数 %s 无数据", name)
-                continue
-            close = data["Close"].dropna()
-            if len(close) < 2:
-                continue
-            last = float(close.iloc[-1])
-            prev = float(close.iloc[-2])
-            change_pct = (last - prev) / prev * 100
-            results.append({
-                "name": name, "ticker": ticker,
-                "close": round(last, 2),
-                "change_pct": round(change_pct, 2),
-            })
-        except Exception as e:
-            log.warning("获取指数 %s 失败: %s", name, e)
+        for attempt in range(3):
+            try:
+                data = yf.download(ticker, period="5d", progress=False, auto_adjust=True)
+                if data.empty:
+                    log.warning("指数 %s 无数据 (attempt %d)", name, attempt + 1)
+                    time.sleep(3)
+                    continue
+                close = data["Close"].dropna()
+                if len(close) < 2:
+                    time.sleep(3)
+                    continue
+                last = float(close.iloc[-1])
+                prev = float(close.iloc[-2])
+                change_pct = (last - prev) / prev * 100
+                results.append({
+                    "name": name, "ticker": ticker,
+                    "close": round(last, 2),
+                    "change_pct": round(change_pct, 2),
+                })
+                break
+            except Exception as e:
+                log.warning("获取指数 %s 失败 (attempt %d): %s", name, attempt + 1, e)
+                time.sleep(3)
     return results if results else None
 
 
