@@ -131,20 +131,19 @@ def _fmt_pct(pct):
 # ---- 数据获取 ----
 
 def fetch_indices():
-    """获取港股主要指数"""
-    tickers = list(HK_INDICES.keys())
-    data = yf.download(tickers, period="5d", progress=False, auto_adjust=True)
-    if data.empty:
-        return None
+    """获取港股主要指数（逐个下载，避免合并下载失败）"""
     results = []
-    for ticker in tickers:
-        name = HK_INDICES[ticker]
+    for ticker, name in HK_INDICES.items():
         try:
-            close = data["Close"][ticker].dropna()
+            data = yf.download(ticker, period="5d", progress=False, auto_adjust=True)
+            if data.empty:
+                log.warning("指数 %s 无数据", name)
+                continue
+            close = data["Close"].dropna()
             if len(close) < 2:
                 continue
-            last = close.iloc[-1]
-            prev = close.iloc[-2]
+            last = float(close.iloc[-1])
+            prev = float(close.iloc[-2])
             change_pct = (last - prev) / prev * 100
             results.append({
                 "name": name, "ticker": ticker,
@@ -153,7 +152,7 @@ def fetch_indices():
             })
         except Exception as e:
             log.warning("获取指数 %s 失败: %s", name, e)
-    return results
+    return results if results else None
 
 
 def fetch_sector_performance():
