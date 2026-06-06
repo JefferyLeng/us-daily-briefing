@@ -569,9 +569,9 @@ def main():
     config = load_config(args.config)
     webhook_url = config.get("feishu_webhook_url", "")
 
-    # 周末检查
-    if not args.force and datetime.now(timezone(timedelta(hours=8))).weekday() >= 5:
-        log.info("今天不是交易日（周末），跳过。使用 --force 强制运行。")
+    # 美股交易日对应北京时间周二至周六
+    if not args.force and datetime.now(timezone(timedelta(hours=8))).weekday() == 0:
+        log.info("北京时间周一，美股无交易（周末），跳过。使用 --force 强制运行。")
         return
 
     # 合并中概股配置
