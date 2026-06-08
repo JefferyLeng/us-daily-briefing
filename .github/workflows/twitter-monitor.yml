@@ -1,0 +1,46 @@
+name: Twitter Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '3,18,33,48 * * * *'   # 每15分钟，偏移3分钟避开高峰
+
+jobs:
+  monitor-tweets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore sent tweets cache
+        uses: actions/cache@v4
+        with:
+          path: sent_tweets.json
+          key: sent-tweets-${{ github.run_number }}
+          restore-keys: |
+            sent-tweets-
+
+      - name: Run twitter monitor
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          SOCIALDATA_API_KEY: ${{ secrets.SOCIALDATA_API_KEY }}
+        run: |
+          python3 -c "
+          import json, os
+          cfg = {}
+          if os.path.exists('config.json'):
+              with open('config.json', 'r') as f:
+                  cfg = json.load(f)
+          cfg['feishu_webhook_url'] = os.environ['FEISHU_WEBHOOK_URL']
+          cfg['socialdata_api_key'] = os.environ['SOCIALDATA_API_KEY']
+          with open('config.json', 'w') as f:
+              json.dump(cfg, f, ensure_ascii=False, indent=2)
+          "
+          python3 twitter_monitor.py

@@ -1,5 +1,8 @@
 config.json
+sent_reports.json
+sent_iresearch.json
 __pycache__/
 *.pyc
 .DS_Store
 *.log
+sent_tweets.json

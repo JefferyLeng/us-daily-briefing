@@ -1,0 +1,47 @@
+name: Research Report Digest
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1-5'    # 北京时间 14:00
+    - cron: '15 6 * * 1-5'   # 北京时间 14:15 备用
+
+jobs:
+  send-reports:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore sent reports cache
+        uses: actions/cache@v4
+        with:
+          path: sent_reports.json
+          key: sent-reports-${{ github.run_number }}
+          restore-keys: |
+            sent-reports-
+
+      - name: Run report script
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        run: |
+          python3 -c "
+          import json, os
+          cfg = {}
+          if os.path.exists('config.json'):
+              with open('config.json', 'r') as f:
+                  cfg = json.load(f)
+          cfg['feishu_webhook_url'] = os.environ['FEISHU_WEBHOOK_URL']
+          cfg['deepseek_api_key'] = os.environ['DEEPSEEK_API_KEY']
+          with open('config.json', 'w') as f:
+              json.dump(cfg, f, ensure_ascii=False, indent=2)
+          "
+          python3 research_report.py --force
