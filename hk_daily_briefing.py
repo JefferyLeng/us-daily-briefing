@@ -142,6 +142,8 @@ def fetch_indices():
                     time.sleep(3)
                     continue
                 close = data["Close"].dropna()
+                if isinstance(close, pd.DataFrame):
+                    close = close.squeeze()
                 if len(close) < 2:
                     time.sleep(3)
                     continue
