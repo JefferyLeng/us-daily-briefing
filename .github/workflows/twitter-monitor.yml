@@ -2,8 +2,6 @@ name: Twitter Monitor
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '3,18,33,48 * * * *'   # 每15分钟，偏移3分钟避开高峰
 
 jobs:
   monitor-tweets:
