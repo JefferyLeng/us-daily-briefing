@@ -19,7 +19,12 @@
       "Bash(ssh *)",
       "Bash(brew install *)",
       "Bash(gh run *)",
-      "Bash(gh workflow *)"
+      "Bash(gh workflow *)",
+      "Bash(crontab -l)",
+      "Bash(gh api *)",
+      "Bash(curl *)",
+      "Bash(git *)",
+      "Bash(bash cloud/package.sh)"
     ]
   }
 }
