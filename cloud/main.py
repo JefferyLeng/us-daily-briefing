@@ -48,7 +48,7 @@ def handler(event, context):
         [sys.executable, script_path, "--force"],
         capture_output=True,
         text=True,
-        timeout=300,
+        timeout=480,
         cwd=CODE_DIR,
     )
 

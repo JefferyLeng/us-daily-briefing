@@ -7,11 +7,12 @@ ROOT_DIR="$(dirname "$SCRIPT_DIR")"
 DIST_DIR="$SCRIPT_DIR/dist"
 
 rm -rf "$DIST_DIR"
+rm -f "$SCRIPT_DIR/deploy.zip"
 mkdir -p "$DIST_DIR"
 
 cp "$SCRIPT_DIR/main.py" "$DIST_DIR/"
 cp "$SCRIPT_DIR/requirements.txt" "$DIST_DIR/"
-cp "$ROOT_DIR/iresearch_report.py" "$DIST_DIR/"
+cp "$ROOT_DIR/research_report.py" "$DIST_DIR/"
 cp "$ROOT_DIR/hk_daily_briefing.py" "$DIST_DIR/"
 cp "$ROOT_DIR/us_daily_briefing.py" "$DIST_DIR/"
 

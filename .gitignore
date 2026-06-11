@@ -1,6 +1,7 @@
 config.json
 sent_reports.json
 sent_iresearch.json
+sent_hibor.json
 __pycache__/
 *.pyc
 .DS_Store

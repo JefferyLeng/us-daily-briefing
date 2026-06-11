@@ -2,9 +2,6 @@ name: Research Report Digest
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 6 * * 1-5'    # 北京时间 14:00
-    - cron: '15 6 * * 1-5'   # 北京时间 14:15 备用
 
 jobs:
   send-reports:
@@ -27,6 +24,22 @@ jobs:
           key: sent-reports-${{ github.run_number }}
           restore-keys: |
             sent-reports-
+
+      - name: Restore hibor sent cache
+        uses: actions/cache@v4
+        with:
+          path: sent_hibor.json
+          key: sent-hibor-${{ github.run_number }}
+          restore-keys: |
+            sent-hibor-
+
+      - name: Restore iresearch sent cache
+        uses: actions/cache@v4
+        with:
+          path: sent_iresearch.json
+          key: sent-iresearch-${{ github.run_number }}
+          restore-keys: |
+            sent-iresearch-
 
       - name: Run report script
         env:
