@@ -187,7 +187,7 @@ def save_iresearch_sent(ids):
 # ============================================================
 
 def fetch_em_reports(date_str, max_retries=3):
-    begin_date = (datetime.strptime(date_str, "%Y-%m-%d") - timedelta(days=3)).strftime("%Y-%m-%d")
+    begin_date = date_str   # 仅当天，避免重复推送历史
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
         "Referer": "https://data.eastmoney.com/report/",
@@ -316,8 +316,9 @@ def _hibor_http_get(url, params=None, max_retries=3, delay=1.0):
     return ""
 
 
-def fetch_hibor_reports(hibor_config):
-    """从 https://www.hibor.com.cn/elitelist.html 抓取"全部研报" tab（每日精选）。"""
+def fetch_hibor_reports(hibor_config, target_date=None):
+    """从 https://www.hibor.com.cn/elitelist.html 抓取"全部研报" tab（每日精选）。
+    target_date: 'YYYY-MM-DD'，仅保留当天发布的研报；None 则不过滤。"""
     max_pages = hibor_config.get("max_pages", 1)
     delay = hibor_config.get("request_delay", 1.0)
 
@@ -352,6 +353,10 @@ def fetch_hibor_reports(hibor_config):
             cat_name = cat_raw.strip()
             author = author_raw.strip()
             pub_date = date_raw.strip()
+
+            # 仅保留 target_date 当天发布的研报（pub_date 格式 'YYYY-MM-DD HH:MM:SS'）
+            if target_date and not pub_date.startswith(target_date):
+                continue
 
             org = ""
             org_match = re.match(r'^([^-]+?)-(.*?)-\d{6}$', title)
@@ -829,14 +834,15 @@ def main():
     parsed_hb = []
     if hibor_config.get("enabled", True):
         log.info("=== 抓取慧博投研 ===")
-        parsed_hb = fetch_hibor_reports(hibor_config)
+        parsed_hb = fetch_hibor_reports(hibor_config, target_date=date_str)
+        log.info("[慧博] 当天(%s) %d 篇", date_str, len(parsed_hb))
 
     parsed_ir = []
     if iresearch_config.get("enabled", True):
         log.info("=== 抓取艾瑞咨询 ===")
         raw_ir = fetch_iresearch_reports()
-        parsed_ir = filter_iresearch_recent(raw_ir, days=7)
-        log.info("[艾瑞] 近7天 %d 篇", len(parsed_ir))
+        parsed_ir = filter_iresearch_recent(raw_ir, days=1)
+        log.info("[艾瑞] 当天 %d 篇", len(parsed_ir))
 
     # ---- Phase 2: 去重 & 筛选 ----
     em_sent = load_em_sent()
@@ -851,13 +857,9 @@ def main():
     )
 
     if not em_sel and not hb_sel and not ir_sel:
-        log.info("没有新的未推送研报")
-        card = build_feishu_card([], [], [], date_str)
+        log.info("当天(%s)无新研报，跳过推送", date_str)
         if args.dry_run:
-            print(json.dumps(card, ensure_ascii=False, indent=2))
-            return
-        if webhook_url:
-            send_to_feishu(card, webhook_url)
+            print(json.dumps(build_feishu_card([], [], [], date_str), ensure_ascii=False, indent=2))
         return
 
     log.info("精选: 东财 %d + 慧博 %d + 艾瑞 %d = %d 篇",
