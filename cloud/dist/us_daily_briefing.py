@@ -53,7 +53,7 @@ SECTOR_ETFS = {
 BELLWETHERS = {
     "AAPL": "苹果", "MSFT": "微软", "AMZN": "亚马逊", "GOOGL": "谷歌",
     "META": "Meta", "NVDA": "英伟达", "TSLA": "特斯拉", "LITE": "Lumentum",
-    "MRVL": "迈威尔", "GLW": "康宁", "AVGO": "博通",
+    "MRVL": "迈威尔", "GLW": "康宁", "AVGO": "博通", "SPCX": "SpaceX",
 }
 
 # 存储概念股
@@ -96,6 +96,7 @@ STOCK_CN = {
     # 科技巨头
     "AAPL": "苹果", "MSFT": "微软", "GOOGL": "谷歌", "GOOG": "谷歌",
     "AMZN": "亚马逊", "NVDA": "英伟达", "META": "Meta Platforms", "TSLA": "特斯拉",
+    "SPCX": "SpaceX",
     "BRK-B": "伯克希尔", "BRK.B": "伯克希尔",
     # 金融
     "JPM": "摩根大通", "BAC": "美国银行", "WFC": "富国银行", "GS": "高盛",
