@@ -24,7 +24,12 @@
       "Bash(gh api *)",
       "Bash(curl *)",
       "Bash(git *)",
-      "Bash(bash cloud/package.sh)"
+      "Bash(bash cloud/package.sh)",
+      "Bash(rm -f dist/iresearch_report.py)",
+      "Bash(./package.sh)",
+      "Bash(unzip -l /Users/smzdm/Desktop/MFM/automation/cloud/deploy.zip)",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/**)"
     ]
   }
 }
