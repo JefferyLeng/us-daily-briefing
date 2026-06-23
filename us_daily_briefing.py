@@ -54,6 +54,7 @@ BELLWETHERS = {
     "AAPL": "苹果", "MSFT": "微软", "AMZN": "亚马逊", "GOOGL": "谷歌",
     "META": "Meta", "NVDA": "英伟达", "TSLA": "特斯拉", "LITE": "Lumentum",
     "MRVL": "迈威尔", "GLW": "康宁", "AVGO": "博通", "SPCX": "SpaceX",
+    "AMD": "超微半导体",
 }
 
 # 存储概念股
