@@ -348,9 +348,9 @@ def fetch_chinese_adrs(adr_map):
 def fetch_stock_group(name_map):
     """通用：获取一组股票的当日涨跌
 
-    批量 download 取收盘价,涨跌幅用 yf.Ticker.fast_info 的 previous_close 校正——
-    对新股(如 SKHY 刚上市/代码切换)历史数据不足时,prev_close 来自交易所官方,
-    比 close.iloc[-2] 更可靠。
+    批量 download 拉收盘价,涨跌幅 = (今日收盘 - 昨日收盘) / 昨日收盘。
+    用 close.iloc[-2] 作为"昨日收盘"——这是 yfinance 最可靠的口径,
+    fast_info.previous_close 对新股(代码切换/上市初期)返回值不可靠。
     """
     tickers = list(name_map.keys())
     data = yf.download(tickers, period="5d", progress=False, auto_adjust=True)
@@ -362,16 +362,11 @@ def fetch_stock_group(name_map):
         name = name_map.get(ticker, ticker)
         try:
             close = data["Close"][ticker].dropna()
-            if len(close) < 1:
+            if len(close) < 2:
+                log.warning("%s(%s): 数据不足(%d条),跳过", name, ticker, len(close))
                 continue
             last = float(close.iloc[-1])
-            # 优先用交易所 previous_close(更可靠),取不到才退回历史倒数第二
-            try:
-                prev = float(yf.Ticker(ticker).fast_info.previous_close)
-            except Exception:
-                if len(close) < 2:
-                    continue
-                prev = float(close.iloc[-2])
+            prev = float(close.iloc[-2])
             change_pct = (last - prev) / prev * 100
             results.append({
                 "name": name,
