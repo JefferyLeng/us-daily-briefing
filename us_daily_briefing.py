@@ -357,6 +357,7 @@ def fetch_stock_group(name_map):
         name = name_map.get(ticker, ticker)
         try:
             close = data["Close"][ticker].dropna()
+            log.info("%s(%s): close序列=%s, 条数=%d", name, ticker, list(close.round(2)), len(close))
             if len(close) < 2:
                 continue
             last = close.iloc[-1]
