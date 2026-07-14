@@ -54,14 +54,14 @@ BELLWETHERS = {
     "AAPL": "苹果", "MSFT": "微软", "AMZN": "亚马逊", "GOOGL": "谷歌",
     "META": "Meta", "NVDA": "英伟达", "TSLA": "特斯拉", "LITE": "Lumentum",
     "MRVL": "迈威尔", "GLW": "康宁", "AVGO": "博通", "SPCX": "SpaceX",
-    "AMD": "超微半导体",
+    "AMD": "超微半导体", "SKHY": "海力士",
 }
 
 # 存储概念股
 STORAGE_STOCKS = {
     "MU": "美光科技", "WDC": "西部数据", "STX": "希捷",
     "PSTG": "Pure Storage", "NTAP": "NetApp", "SIMO": "Silicon Motion",
-    "SMCI": "超微电脑",
+    "SMCI": "超微电脑", "SKHY": "海力士",
 }
 
 # CPO 概念股（光电共封装）
