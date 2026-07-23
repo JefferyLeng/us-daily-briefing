@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""研报速递 - 三源合一（东方财富 + 慧博投研 + 艾瑞咨询）+ DeepSeek总结 + 飞书推送"""
+"""研报速递 - 四源合一（东方财富 + 慧博投研 + 艾瑞咨询 + TrendForce）+ DeepSeek总结 + 飞书推送"""
 
 import argparse
 import json
@@ -35,6 +35,7 @@ def _resolve_sent_path(filename):
 SENT_EM_PATH = _resolve_sent_path("sent_reports.json")
 SENT_HIBOR_PATH = _resolve_sent_path("sent_hibor.json")
 SENT_IRESEARCH_PATH = _resolve_sent_path("sent_iresearch.json")
+SENT_TRENDFORCE_PATH = _resolve_sent_path("sent_trendforce.json")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -92,6 +93,12 @@ HIBOR_RATING_MAP = {
 # ---- 艾瑞咨询 ----
 IRESEARCH_URL = "https://report.iresearch.cn/"
 
+# ---- TrendForce 集邦咨询 ----
+# 全球站 RSS 2.0，20 条 item，含标题/链接/日期/作者/描述
+# 中文站 cn.trendforce.com SSL 被拦，故用全球站英文 RSS，由 DeepSeek 翻译成中文
+TRENDFORCE_RSS_URL = "https://www.trendforce.com/news/feed/"
+TRENDFORCE_SOURCE_NAME = "TrendForce 集邦咨询"
+
 # ---- DeepSeek ----
 DEEPSEEK_API = "https://api.deepseek.com/chat/completions"
 SYSTEM_PROMPT = """你是一个专业的金融研报分析师。请根据以下研报信息，生成简洁的要点总结。
@@ -110,6 +117,15 @@ IRESEARCH_SYSTEM_PROMPT = """你是一个专业的行业研究分析师。请根
 1. 用2-4个要点概括报告核心观点
 2. 每个要点不超过50字
 3. 重点突出：市场规模、增长趋势、关键数据、行业机会
+4. 保持客观，使用第三人称
+5. 直接输出要点，每行一个，以 "- " 开头，不要加标题和额外说明"""
+
+TRENDFORCE_SYSTEM_PROMPT = """你是一个专业的科技产业分析师。请根据以下英文资讯，生成简洁的中文要点总结。
+
+要求：
+1. 用2-4个要点概括核心观点（请输出中文）
+2. 每个要点不超过50字
+3. 重点突出：技术趋势、价格变动、产能/出货、产业链影响
 4. 保持客观，使用第三人称
 5. 直接输出要点，每行一个，以 "- " 开头，不要加标题和额外说明"""
 
@@ -180,6 +196,13 @@ def load_iresearch_sent():
 
 def save_iresearch_sent(ids):
     _save_sent(SENT_IRESEARCH_PATH, ids, 14)
+
+
+def load_trendforce_sent():
+    return _load_sent(SENT_TRENDFORCE_PATH, 7)
+
+def save_trendforce_sent(ids):
+    _save_sent(SENT_TRENDFORCE_PATH, ids, 7)
 
 
 # ============================================================
@@ -506,6 +529,79 @@ def filter_iresearch_recent(reports, days=7):
     return recent
 
 
+# ---- TrendForce：RSS 抓取 ----
+
+def fetch_trendforce_reports():
+    """从 TrendForce 全球站 RSS 抓取最新英文资讯。
+
+    RSS 2.0 标准格式，已实测 20 条 item 含 title/link/pubDate/description。
+    中文站 cn.trendforce.com SSL 被拦，故走全球站英文 RSS。
+    """
+    import xml.etree.ElementTree as ET
+    from email.utils import parsedate_to_datetime
+
+    try:
+        resp = requests.get(
+            TRENDFORCE_RSS_URL,
+            headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"},
+            timeout=15,
+        )
+        root = ET.fromstring(resp.text)
+    except Exception as e:
+        log.error("[TrendForce] RSS 抓取失败: %s", e)
+        return []
+
+    items = root.findall(".//item")
+    log.info("[TrendForce] RSS 解析到 %d 条", len(items))
+
+    reports = []
+    for item in items:
+        title = (item.findtext("title") or "").strip()
+        link = (item.findtext("link") or "").strip()
+        pub_date_raw = (item.findtext("pubDate") or "").strip()
+        desc_raw = (item.findtext("description") or "").strip()
+
+        if not title or not link:
+            continue
+
+        # 日期解析 RFC822 → %Y-%m-%d
+        pub_date = ""
+        if pub_date_raw:
+            try:
+                dt = parsedate_to_datetime(pub_date_raw)
+                pub_date = dt.astimezone(CST).strftime("%Y-%m-%d")
+            except Exception:
+                pass
+
+        # 去掉 description 里的 HTML 标签
+        desc = re.sub(r"<[^>]+>", "", desc_raw).strip()
+
+        # id 取 link 末尾 slug；为空则退回 link 本身
+        rid = link.rstrip("/").split("/")[-1] or link
+
+        # 标题清理：去掉 [News] / [Insights] / [Press] 前缀
+        clean_title = re.sub(r"^\[(News|Insights|Press)\]\s*", "", title)
+
+        reports.append({
+            "id": rid,
+            "title": clean_title,
+            "org": TRENDFORCE_SOURCE_NAME,
+            "researcher": "",
+            "publishDate": pub_date,
+            "rating": "",
+            "ratingChange": "",
+            "reportType": "行业",
+            "stockName": "",
+            "stockCode": "",
+            "detailUrl": link,
+            "description": desc,
+            "content": desc,
+            "source": "trendforce",
+        })
+
+    return reports
+
+
 # ============================================================
 # 评分 & 筛选
 # ============================================================
@@ -567,14 +663,15 @@ def _select_from(reports, sent_ids, preferred, count, source_bonus=0, max_stock=
     return selected
 
 
-def select_reports(em_reports, hb_reports, ir_reports,
-                   preferred, em_sent, hb_sent, ir_sent,
-                   em_count, hb_count, ir_count,
+def select_reports(em_reports, hb_reports, ir_reports, tf_reports,
+                   preferred, em_sent, hb_sent, ir_sent, tf_sent,
+                   em_count, hb_count, ir_count, tf_count,
                    hibor_bonus=20):
     em_sel = _select_from(em_reports, em_sent, preferred, em_count, source_bonus=0)
     hb_sel = _select_from(hb_reports, hb_sent, preferred, hb_count, source_bonus=hibor_bonus)
     ir_sel = _select_from(ir_reports, ir_sent, preferred, ir_count, source_bonus=0)
-    return em_sel, hb_sel, ir_sel
+    tf_sel = _select_from(tf_reports, tf_sent, preferred, tf_count, source_bonus=0)
+    return em_sel, hb_sel, ir_sel, tf_sel
 
 
 # ============================================================
@@ -697,10 +794,22 @@ def _build_iresearch_block(index, r):
     return {"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}}
 
 
-def build_feishu_card(em_reports, hb_reports, ir_reports, date_str):
+def _build_trendforce_block(index, r):
+    # TrendForce 为英文资讯，AI 已译成中文要点；标题保留英文原文
+    lines = [f"**{index}. {r['title']}**"]
+    if r.get("publishDate"):
+        lines.append(f"发布日期: {r['publishDate']} | 来源: TrendForce")
+    if r.get("ai_summary"):
+        lines.append(f"\n**核心提炼：**\n{r['ai_summary']}")
+    if r.get("detailUrl"):
+        lines.append(f"\n[查看原文]({r['detailUrl']})")
+    return {"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}}
+
+
+def build_feishu_card(em_reports, hb_reports, ir_reports, tf_reports, date_str):
     header_title = f"研报速递 | {date_str}"
     elements = []
-    total = len(em_reports) + len(hb_reports) + len(ir_reports)
+    total = len(em_reports) + len(hb_reports) + len(ir_reports) + len(tf_reports)
 
     if total == 0:
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**今日暂无新研报**"}})
@@ -747,10 +856,19 @@ def build_feishu_card(em_reports, hb_reports, ir_reports, date_str):
             elements.append(_build_iresearch_block(i, r))
             elements.append({"tag": "hr"})
 
+    # ---- TrendForce 科技产业资讯专区 ----
+    if tf_reports:
+        elements.append({"tag": "div", "text": {"tag": "lark_md",
+            "content": f"**TrendForce 集邦咨询 ({len(tf_reports)}篇)**\n半导体/存储/AI 硬件等英文资讯，已译成中文要点"}})
+        elements.append({"tag": "hr"})
+        for i, r in enumerate(tf_reports, 1):
+            elements.append(_build_trendforce_block(i, r))
+            elements.append({"tag": "hr"})
+
     # 页脚
     now_str = datetime.now(CST).strftime("%H:%M")
     elements.append({"tag": "div", "text": {"tag": "lark_md",
-        "content": f"生成时间: {now_str} | 数据来源: ColdTech + 慧博投研 + 艾瑞咨询"}})
+        "content": f"生成时间: {now_str} | 数据来源: ColdTech + 慧博投研 + 艾瑞咨询 + TrendForce"}})
 
     card = {"msg_type": "interactive", "card": {
         "header": {"title": {"tag": "plain_text", "content": header_title}, "template": "orange"},
@@ -798,7 +916,7 @@ def send_to_feishu(card_data, webhook_url, max_retries=3):
 # ============================================================
 
 def main():
-    parser = argparse.ArgumentParser(description="研报速递 - 三源合一飞书推送")
+    parser = argparse.ArgumentParser(description="研报速递 - 四源合一飞书推送")
     parser.add_argument("--dry-run", action="store_true", help="仅打印卡片内容，不发送")
     parser.add_argument("--force", action="store_true", help="强制运行（忽略非交易日）")
     parser.add_argument("--config", default=None, help="配置文件路径")
@@ -810,11 +928,13 @@ def main():
     settings = config.get("report_settings", {})
     hibor_config = config.get("hibor_settings", {})
     iresearch_config = config.get("iresearch_settings", {})
+    trendforce_config = config.get("trendforce_settings", {})
     preferred = settings.get("preferred_institutions", DEFAULT_PREFERRED_INSTITUTIONS)
 
     em_count = settings.get("eastmoney_count", 10)
     hb_count = settings.get("hibor_count", 10)
     ir_count = settings.get("iresearch_count", 10)
+    tf_count = settings.get("trendforce_count", trendforce_config.get("count", 5))
     hibor_bonus = hibor_config.get("source_bonus", 20)
 
     date_str = datetime.now(CST).strftime("%Y-%m-%d")
@@ -823,8 +943,8 @@ def main():
         log.info("周末，跳过。使用 --force 强制运行。")
         return
 
-    log.info("研报速递启动 | 日期: %s | 东财%d + 慧博%d + 艾瑞%d",
-             date_str, em_count, hb_count, ir_count)
+    log.info("研报速递启动 | 日期: %s | 东财%d + 慧博%d + 艾瑞%d + TrendForce%d",
+             date_str, em_count, hb_count, ir_count, tf_count)
 
     # ---- Phase 1: 抓取三源 ----
     log.info("=== 抓取东方财富研报 ===")
@@ -844,27 +964,38 @@ def main():
         parsed_ir = filter_iresearch_recent(raw_ir, days=1)
         log.info("[艾瑞] 当天 %d 篇", len(parsed_ir))
 
+    parsed_tf = []
+    if trendforce_config.get("enabled", True):
+        log.info("=== 抓取 TrendForce ===")
+        raw_tf = fetch_trendforce_reports()
+        # TrendForce RSS 更新不规律（实测曾冻结 3 周），不做日期过滤，
+        # 直接交给 sent_trendforce.json 去重：未读的最新 N 篇入选。
+        # RSS 默认按时间倒序，配合 _select_from 稳定排序即"最新未读优先"。
+        parsed_tf = raw_tf
+        log.info("[TrendForce] RSS 共 %d 篇（去重后筛选）", len(parsed_tf))
+
     # ---- Phase 2: 去重 & 筛选 ----
     em_sent = load_em_sent()
     hb_sent = load_hibor_sent()
     ir_sent = load_iresearch_sent()
+    tf_sent = load_trendforce_sent()
 
-    em_sel, hb_sel, ir_sel = select_reports(
-        parsed_em, parsed_hb, parsed_ir,
-        preferred, em_sent, hb_sent, ir_sent,
-        em_count, hb_count, ir_count,
+    em_sel, hb_sel, ir_sel, tf_sel = select_reports(
+        parsed_em, parsed_hb, parsed_ir, parsed_tf,
+        preferred, em_sent, hb_sent, ir_sent, tf_sent,
+        em_count, hb_count, ir_count, tf_count,
         hibor_bonus=hibor_bonus,
     )
 
-    if not em_sel and not hb_sel and not ir_sel:
+    if not em_sel and not hb_sel and not ir_sel and not tf_sel:
         log.info("当天(%s)无新研报，跳过推送", date_str)
         if args.dry_run:
-            print(json.dumps(build_feishu_card([], [], [], date_str), ensure_ascii=False, indent=2))
+            print(json.dumps(build_feishu_card([], [], [], [], date_str), ensure_ascii=False, indent=2))
         return
 
-    log.info("精选: 东财 %d + 慧博 %d + 艾瑞 %d = %d 篇",
-             len(em_sel), len(hb_sel), len(ir_sel),
-             len(em_sel) + len(hb_sel) + len(ir_sel))
+    log.info("精选: 东财 %d + 慧博 %d + 艾瑞 %d + TrendForce %d = %d 篇",
+             len(em_sel), len(hb_sel), len(ir_sel), len(tf_sel),
+             len(em_sel) + len(hb_sel) + len(ir_sel) + len(tf_sel))
 
     # ---- Phase 3: 抓取摘要 ----
     for r in em_sel:
@@ -898,8 +1029,17 @@ def main():
         else:
             r["ai_summary"] = ""
 
+    # TrendForce 英文资讯：用专门 prompt 让 DeepSeek 译成中文要点
+    for r in tf_sel:
+        if ai_available:
+            r["ai_summary"] = summarize_report(r, api_key, TRENDFORCE_SYSTEM_PROMPT)
+        elif r.get("content"):
+            r["ai_summary"] = r["content"][:300]
+        else:
+            r["ai_summary"] = ""
+
     # ---- Phase 5: 构建卡片 & 推送 ----
-    card = build_feishu_card(em_sel, hb_sel, ir_sel, date_str)
+    card = build_feishu_card(em_sel, hb_sel, ir_sel, tf_sel, date_str)
 
     if args.dry_run:
         print("\n" + "=" * 60)
@@ -925,6 +1065,10 @@ def main():
         new_ir = {r["id"] for r in ir_sel if r.get("id")}
         ir_sent.update(new_ir)
         save_iresearch_sent(ir_sent)
+
+        new_tf = {r["id"] for r in tf_sel if r.get("id")}
+        tf_sent.update(new_tf)
+        save_trendforce_sent(tf_sent)
 
     sys.exit(0 if success else 1)
 

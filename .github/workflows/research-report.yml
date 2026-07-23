@@ -41,6 +41,14 @@ jobs:
           restore-keys: |
             sent-iresearch-
 
+      - name: Restore trendforce sent cache
+        uses: actions/cache@v4
+        with:
+          path: sent_trendforce.json
+          key: sent-trendforce-${{ github.run_number }}
+          restore-keys: |
+            sent-trendforce-
+
       - name: Run report script
         env:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
