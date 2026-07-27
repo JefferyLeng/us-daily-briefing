@@ -54,13 +54,14 @@ BELLWETHERS = {
     "AAPL": "苹果", "MSFT": "微软", "AMZN": "亚马逊", "GOOGL": "谷歌",
     "META": "Meta", "NVDA": "英伟达", "TSLA": "特斯拉", "LITE": "Lumentum",
     "MRVL": "迈威尔", "GLW": "康宁", "AVGO": "博通", "SPCX": "SpaceX",
+    "AMD": "超微半导体", "SKHY": "海力士",
 }
 
 # 存储概念股
 STORAGE_STOCKS = {
     "MU": "美光科技", "WDC": "西部数据", "STX": "希捷",
     "PSTG": "Pure Storage", "NTAP": "NetApp", "SIMO": "Silicon Motion",
-    "SMCI": "超微电脑",
+    "SMCI": "超微电脑", "SKHY": "海力士",
 }
 
 # CPO 概念股（光电共封装）
@@ -345,7 +346,12 @@ def fetch_chinese_adrs(adr_map):
 
 
 def fetch_stock_group(name_map):
-    """通用：获取一组股票的当日涨跌"""
+    """通用：获取一组股票的当日涨跌
+
+    批量 download 拉收盘价,涨跌幅 = (今日收盘 - 昨日收盘) / 昨日收盘。
+    用 close.iloc[-2] 作为"昨日收盘"——这是 yfinance 最可靠的口径,
+    fast_info.previous_close 对新股(代码切换/上市初期)返回值不可靠。
+    """
     tickers = list(name_map.keys())
     data = yf.download(tickers, period="5d", progress=False, auto_adjust=True)
     if data.empty:
@@ -357,9 +363,10 @@ def fetch_stock_group(name_map):
         try:
             close = data["Close"][ticker].dropna()
             if len(close) < 2:
+                log.warning("%s(%s): 数据不足(%d条),跳过", name, ticker, len(close))
                 continue
-            last = close.iloc[-1]
-            prev = close.iloc[-2]
+            last = float(close.iloc[-1])
+            prev = float(close.iloc[-2])
             change_pct = (last - prev) / prev * 100
             results.append({
                 "name": name,
