@@ -939,6 +939,13 @@ def main():
 
     date_str = datetime.now(CST).strftime("%Y-%m-%d")
 
+    # 全局开关：config.json 里 report_settings.enabled = false 可暂停推送
+    # （FC 触发器仍在跑也不会真正推送，不消耗 DeepSeek API）
+    # 用 --force 可绕过，方便手动测试
+    if not args.force and not settings.get("enabled", True):
+        log.info("研报推送已暂停（report_settings.enabled=false）。用 --force 强制运行。")
+        return
+
     if not args.force and datetime.now(CST).weekday() >= 5:
         log.info("周末，跳过。使用 --force 强制运行。")
         return

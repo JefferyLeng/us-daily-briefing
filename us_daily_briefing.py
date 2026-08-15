@@ -71,6 +71,14 @@ CPO_STOCKS = {
     "AAOI": "Applied Optoelectronics", "ACMR": "ACM Research",
 }
 
+# 云计算厂商
+CLOUD_STOCKS = {
+    "MSFT": "微软Azure", "AMZN": "亚马逊AWS", "GOOGL": "谷歌云",
+    "ORCL": "甲骨文", "CRWV": "CoreWeave", "NBIS": "Nebius",
+    "NOW": "ServiceNow", "SNOW": "Snowflake",
+    "NET": "Cloudflare", "DDOG": "Datadog",
+}
+
 DEFAULT_CHINESE_ADRS = {
     "BABA": "阿里巴巴", "JD": "京东", "PDD": "拼多多",
     "BIDU": "百度", "NIO": "蔚来", "LI": "理想汽车",
@@ -126,7 +134,7 @@ STOCK_CN = {
     "LSCC": "Lattice Semiconductor", "RMBS": "Rambus",
     # 软件/云
     "ADBE": "Adobe", "CRM": "Salesforce", "ORCL": "甲骨文", "IBM": "IBM",
-    "NOW": "ServiceNow", "INTU": "Intuit", "SNOW": "Snowflake",
+    "NOW": "ServiceNow", "INTU": "Intuit", "SNOW": "Snowflake", "CRWV": "CoreWeave", "NBIS": "Nebius",
     "PLTR": "Palantir", "CRWD": "CrowdStrike", "DDOG": "Datadog",
     "NET": "Cloudflare", "MDB": "MongoDB", "ZS": "Zscaler",
     "PANW": "Palo Alto Networks", "FTNT": "Fortinet",
@@ -417,7 +425,7 @@ def _fmt_stock_line(s):
     return f"{s['name']}({s['ticker']})  ${s['close']:.2f}  {_fmt_pct(s['change_pct'])}"
 
 
-def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo):
+def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo, cloud):
     """构建飞书交互式卡片消息"""
     today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
     elements = []
@@ -517,6 +525,17 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, stor
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
     else:
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🔗 CPO概念股** — 数据暂不可用"}})
+
+    elements.append({"tag": "hr"})
+
+    # 云计算厂商
+    if cloud:
+        lines = ["**☁️ 云计算厂商**\n"]
+        for s in cloud:
+            lines.append(_fmt_stock_line(s))
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
+    else:
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**☁️ 云计算厂商** — 数据暂不可用"}})
 
     # 页脚
     elements.append({"tag": "hr"})
@@ -642,8 +661,15 @@ def main():
     except Exception as e:
         log.error("获取CPO概念股数据失败: %s", e)
 
+    cloud = None
+    try:
+        cloud = fetch_stock_group(CLOUD_STOCKS)
+        log.info("云计算厂商数据: %d 条", len(cloud) if cloud else 0)
+    except Exception as e:
+        log.error("获取云计算厂商数据失败: %s", e)
+
     # 构建卡片
-    card = build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo)
+    card = build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo, cloud)
 
     if args.dry_run:
         print("\n" + "=" * 60)
