@@ -39,8 +39,10 @@ MAJOR_INDICES = {
 EXTENDED_INDICES = {
     "^NDX": "纳斯达克100",
     "^VIX": "VIX恐慌指数",
-    "^HXC": "中国金龙指数",   # Yahoo 无此代码时自动跳过
+    "^HXC": "中国金龙指数",   # Yahoo 常无数据，回退用 PGJ（Invesco 中国金龙 ETF）
 }
+# 金龙指数回退链：^HXC 无数据时用 PGJ ETF 代替
+FALLBACK_TICKERS = {"^HXC": ("PGJ", "中国金龙指数")}
 
 # 网页版报告托管地址（GitHub Pages，随 gh-pages 分支部署）
 PAGES_BASE_URL = "https://jefferyleng.github.io/us-daily-briefing/"
@@ -220,17 +222,28 @@ def fetch_major_indices():
     年初至今涨跌（收盘 vs 年内首个收盘）。
     """
     all_indices = {**MAJOR_INDICES, **EXTENDED_INDICES}
-    tickers = list(all_indices.keys())
+    # 回退标的（如 ^HXC 的 PGJ）一并下载，主代码无数据时启用
+    fallback_map = dict(FALLBACK_TICKERS)
+    tickers = list(all_indices.keys()) + [fb for fb, _ in fallback_map.values()]
     data = yf.download(tickers, period="ytd", progress=False, auto_adjust=True)
     if data.empty:
         return None
 
     results = []
-    for ticker in tickers:
-        name = all_indices[ticker]
+    for ticker, name in all_indices.items():
         try:
             close = data["Close"][ticker].dropna()
+            used = ticker
+            if len(close) < 2 and ticker in fallback_map:
+                # 主代码无数据 → 尝试回退标的
+                fb_ticker, fb_name = fallback_map[ticker]
+                fb_close = data["Close"][fb_ticker].dropna()
+                if len(fb_close) >= 2:
+                    close, used = fb_close, fb_ticker
+                    name = fb_name
+                    log.info("[指数] %s 无数据，回退用 %s", ticker, fb_ticker)
             if len(close) < 2:
+                log.warning("[指数] %s(%s) 数据不足(%d条)，跳过", name, ticker, len(close))
                 continue
             last = close.iloc[-1]
             prev = close.iloc[-2]
@@ -238,7 +251,7 @@ def fetch_major_indices():
             ytd_pct = (last - close.iloc[0]) / close.iloc[0] * 100
             results.append({
                 "name": name,
-                "ticker": ticker,
+                "ticker": used,
                 "close": round(last, 2),
                 "change_pct": round(change_pct, 2),
                 "ytd_pct": round(ytd_pct, 2),
@@ -450,13 +463,13 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, stor
     # 大盘指数（含扩展指数与年初至今）
     if indices:
         lines = ["**📊 指数行情**\n"]
-        extended_tickers = set(EXTENDED_INDICES.keys())
+        extended_names = set(EXTENDED_INDICES.values())
         for idx in indices:
             line = f"{idx['name']}  {idx['close']:>10,.2f}  {_fmt_pct(idx['change_pct'])}"
             ytd = idx.get("ytd_pct")
             if ytd is not None:
                 line += f"  年初{_fmt_pct(ytd)}"
-            if idx["ticker"] in extended_tickers:
+            if idx["name"] in extended_names:
                 line = "· " + line   # 扩展指数缩进区分
             lines.append(line)
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
