@@ -455,139 +455,127 @@ def _fmt_stock_line(s):
     return f"{s['name']}({s['ticker']})  ${s['close']:.2f}  {_fmt_pct(s['change_pct'])}"
 
 
+def _ball(pct):
+    """涨跌圆点：红涨绿跌（A 股配色，与网页版一致）"""
+    if pct > 0:
+        return "🔴"
+    if pct < 0:
+        return "🟢"
+    return "⚪"
+
+
+def _updown_stat(items):
+    """涨跌统计：返回 (上涨数, 总数)"""
+    up = sum(1 for s in items if s.get("change_pct", 0) > 0)
+    return up, len(items)
+
+
+def _compact_group(items, per_line=4):
+    """个股组紧凑排列：🔴名称 +x.xx%，每行 per_line 只"""
+    parts = [f"{_ball(s['change_pct'])}{s['name']} {s['change_pct']:+.2f}%" for s in items]
+    return "\n".join(
+        "  ".join(parts[i:i + per_line]) for i in range(0, len(parts), per_line))
+
+
 def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo, cloud):
-    """构建飞书交互式卡片消息"""
-    today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+    """构建飞书摘要版卡片：统计 + 精简关键项，完整数据引导到网页版报告"""
+    bj_now = datetime.now(timezone(timedelta(hours=8)))
+    today = bj_now.strftime("%Y-%m-%d")
+    us_date = (bj_now - timedelta(days=1)).strftime("%Y-%m-%d")
     elements = []
 
-    # 大盘指数（含扩展指数与年初至今）
-    if indices:
-        lines = ["**📊 指数行情**\n"]
-        extended_names = set(EXTENDED_INDICES.values())
-        for idx in indices:
-            line = f"{idx['name']}  {idx['close']:>10,.2f}  {_fmt_pct(idx['change_pct'])}"
+    elements.append({"tag": "div", "text": {"tag": "lark_md",
+        "content": f"**收盘日（美东）{us_date}**"}})
+
+    # 一、三大指数 & 费半（红涨绿跌 + 年初至今）
+    majors = [i for i in (indices or []) if i["ticker"] in MAJOR_INDICES]
+    if majors:
+        lines = ["**一、三大指数 & 费半**\n"]
+        for idx in majors:
+            line = (f"{_ball(idx['change_pct'])} {idx['name']}  "
+                    f"{idx['close']:,.2f}  {idx['change_pct']:+.2f}%")
             ytd = idx.get("ytd_pct")
             if ytd is not None:
-                line += f"  年初{_fmt_pct(ytd)}"
-            if idx["name"] in extended_names:
-                line = "· " + line   # 扩展指数缩进区分
+                line += f"  年初{ytd:+.1f}%"
             lines.append(line)
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
     else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**📊 指数行情** — 数据暂不可用"}})
+        elements.append({"tag": "div", "text": {"tag": "lark_md",
+            "content": "**一、三大指数 & 费半** — 数据暂不可用"}})
 
     elements.append({"tag": "hr"})
 
-    # 板块表现
+    # 二、板块：统计 + 领涨/垫底
     if sectors:
-        lines = ["**🏭 板块表现（按涨跌幅排序）**\n"]
-        for s in sectors:
-            lines.append(f"{s['name']}({s['ticker']})  {_fmt_pct(s['change_pct'])}")
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
+        up, total = _updown_stat(sectors)
+        top, bottom = sectors[0], sectors[-1]
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content":
+            f"**二、板块：{total} 个行业 {up} 涨 {total - up} 跌**\n"
+            f"领涨 {top['name']} {top['change_pct']:+.2f}% ｜ "
+            f"垫底 {bottom['name']} {bottom['change_pct']:+.2f}%"}})
     else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🏭 板块表现** — 数据暂不可用"}})
+        elements.append({"tag": "div", "text": {"tag": "lark_md",
+            "content": "**二、板块表现** — 数据暂不可用"}})
 
     elements.append({"tag": "hr"})
 
-    # 涨幅个股
-    if gainers:
-        lines = ["**🚀 涨幅 Top 20**\n"]
-        for i, s in enumerate(gainers, 1):
-            cn = f" {s['cn_name']}" if s.get("cn_name") else ""
-            sector = f" [{s['sector']}]" if s.get("sector") else ""
-            lines.append(
-                f"{i}. {s['display_name']}({s['symbol']}){cn}{sector}  "
-                f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
-            )
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
-    else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🚀 涨幅排行** — 数据暂不可用"}})
+    # 三/四、涨跌幅 Top 5
+    for no, title, items in (("三", "涨幅 Top 5", gainers), ("四", "跌幅 Top 5", losers)):
+        if items:
+            lines = [f"**{no}、{title}**\n"]
+            for s in items[:5]:
+                name = s.get("cn_name") or s["display_name"]
+                lines.append(f"{_ball(s['change_pct'])} {name}({s['symbol']})"
+                             f"  ${s['price']:.2f}  {s['change_pct']:+.2f}%")
+            elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
+        else:
+            elements.append({"tag": "div", "text": {"tag": "lark_md",
+                "content": f"**{no}、{title}** — 数据暂不可用"}})
+        elements.append({"tag": "hr"})
 
-    elements.append({"tag": "hr"})
-
-    # 跌幅个股
-    if losers:
-        lines = ["**📉 跌幅 Top 20**\n"]
-        for i, s in enumerate(losers, 1):
-            cn = f" {s['cn_name']}" if s.get("cn_name") else ""
-            sector = f" [{s['sector']}]" if s.get("sector") else ""
-            lines.append(
-                f"{i}. {s['display_name']}({s['symbol']}){cn}{sector}  "
-                f"${s['price']:.2f}  {_fmt_pct(s['change_pct'])}"
-            )
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
-    else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**📉 跌幅排行** — 数据暂不可用"}})
-
-    elements.append({"tag": "hr"})
-
-    # 中概股
+    # 五、中概股：金龙指数 + 涨跌统计
     if adrs:
-        lines = ["**🇨🇳 中概股行情**\n"]
-        for s in adrs:
-            lines.append(_fmt_stock_line(s))
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
+        up, total = _updown_stat(adrs)
+        gd = next((i for i in (indices or []) if i["name"] == "中国金龙指数"), None)
+        stat = f"金龙指数 {gd['change_pct']:+.2f}%，" if gd else ""
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content":
+            f"**五、中概股：{stat}{total} 只中 {up} 只上涨**"}})
     else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🇨🇳 中概股行情** — 数据暂不可用"}})
+        elements.append({"tag": "div", "text": {"tag": "lark_md",
+            "content": "**五、中概股** — 数据暂不可用"}})
 
     elements.append({"tag": "hr"})
 
-    # 风向标
-    if bellwethers:
-        lines = ["**🧭 风向标**\n"]
-        for s in bellwethers:
-            lines.append(_fmt_stock_line(s))
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
-    else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🧭 风向标** — 数据暂不可用"}})
-
-    elements.append({"tag": "hr"})
-
-    # 存储概念股
-    if storage:
-        lines = ["**💾 存储概念股**\n"]
-        for s in storage:
-            lines.append(_fmt_stock_line(s))
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
-    else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**💾 存储概念股** — 数据暂不可用"}})
-
-    elements.append({"tag": "hr"})
-
-    # CPO 概念股
-    if cpo:
-        lines = ["**🔗 CPO概念股（光电共封装）**\n"]
-        for s in cpo:
-            lines.append(_fmt_stock_line(s))
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
-    else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**🔗 CPO概念股** — 数据暂不可用"}})
-
-    elements.append({"tag": "hr"})
-
-    # 云计算厂商
-    if cloud:
-        lines = ["**☁️ 云计算厂商**\n"]
-        for s in cloud:
-            lines.append(_fmt_stock_line(s))
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
-    else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**☁️ 云计算厂商** — 数据暂不可用"}})
+    # 六~九、个股组（紧凑排列 + 涨跌统计）
+    groups = [
+        ("六", "风向标", bellwethers),
+        ("七", "存储概念股", storage),
+        ("八", "CPO 概念股（光电共封装）", cpo),
+        ("九", "云计算厂商", cloud),
+    ]
+    for no, title, items in groups:
+        if items:
+            up, total = _updown_stat(items)
+            elements.append({"tag": "div", "text": {"tag": "lark_md", "content":
+                f"**{no}、{title}（{up}/{total} 上涨）**\n" + _compact_group(items)}})
+        else:
+            elements.append({"tag": "div", "text": {"tag": "lark_md",
+                "content": f"**{no}、{title}** — 数据暂不可用"}})
+        elements.append({"tag": "hr"})
 
     # 页脚
-    elements.append({"tag": "hr"})
-    now_str = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
+    now_str = bj_now.strftime("%Y-%m-%d %H:%M")
     elements.append({
         "tag": "div",
         "text": {"tag": "lark_md",
-                 "content": f"生成时间: {now_str}\n[🌐 完整报告（网页版）]({PAGES_BASE_URL})"},
+                 "content": f"生成时间: {now_str}\n[📱 查看完整报告]({PAGES_BASE_URL})"},
     })
 
     card = {
         "msg_type": "interactive",
         "card": {
             "header": {
-                "title": {"tag": "plain_text", "content": f"美股每日早报 | {today}"},
+                "title": {"tag": "plain_text", "content": f"📈 每日美股早报 · {today}"},
                 "template": "blue",
             },
             "elements": elements,
