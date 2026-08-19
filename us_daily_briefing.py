@@ -35,6 +35,16 @@ MAJOR_INDICES = {
     "^SOX": "费城半导体",
 }
 
+# 扩展指数：随网页版报告一起加入（纳指100 / VIX / 金龙指数）
+EXTENDED_INDICES = {
+    "^NDX": "纳斯达克100",
+    "^VIX": "VIX恐慌指数",
+    "^HXC": "中国金龙指数",   # Yahoo 无此代码时自动跳过
+}
+
+# 网页版报告托管地址（GitHub Pages，随 gh-pages 分支部署）
+PAGES_BASE_URL = "https://jefferyleng.github.io/us-daily-briefing/"
+
 SECTOR_ETFS = {
     "XLK": "科技",
     "XLF": "金融",
@@ -204,15 +214,20 @@ def load_config(path=None):
 # ---- 数据获取 ----
 
 def fetch_major_indices():
-    """获取三大指数 + 半导体指数当日收盘数据"""
-    tickers = list(MAJOR_INDICES.keys())
-    data = yf.download(tickers, period="5d", progress=False, auto_adjust=True)
+    """获取三大指数 + 半导体指数 + 扩展指数（纳指100/VIX/金龙）收盘数据。
+
+    用 period="ytd" 一次下载，同时算出日涨跌（收盘 vs 前收）和
+    年初至今涨跌（收盘 vs 年内首个收盘）。
+    """
+    all_indices = {**MAJOR_INDICES, **EXTENDED_INDICES}
+    tickers = list(all_indices.keys())
+    data = yf.download(tickers, period="ytd", progress=False, auto_adjust=True)
     if data.empty:
         return None
 
     results = []
     for ticker in tickers:
-        name = MAJOR_INDICES[ticker]
+        name = all_indices[ticker]
         try:
             close = data["Close"][ticker].dropna()
             if len(close) < 2:
@@ -220,11 +235,13 @@ def fetch_major_indices():
             last = close.iloc[-1]
             prev = close.iloc[-2]
             change_pct = (last - prev) / prev * 100
+            ytd_pct = (last - close.iloc[0]) / close.iloc[0] * 100
             results.append({
                 "name": name,
                 "ticker": ticker,
                 "close": round(last, 2),
                 "change_pct": round(change_pct, 2),
+                "ytd_pct": round(ytd_pct, 2),
             })
         except Exception as e:
             log.warning("获取指数 %s 失败: %s", name, e)
@@ -430,14 +447,21 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, stor
     today = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
     elements = []
 
-    # 大盘指数
+    # 大盘指数（含扩展指数与年初至今）
     if indices:
-        lines = ["**📊 三大指数及半导体指数**\n"]
+        lines = ["**📊 指数行情**\n"]
+        extended_tickers = set(EXTENDED_INDICES.keys())
         for idx in indices:
-            lines.append(f"{idx['name']}  {idx['close']:>10,.2f}  {_fmt_pct(idx['change_pct'])}")
+            line = f"{idx['name']}  {idx['close']:>10,.2f}  {_fmt_pct(idx['change_pct'])}"
+            ytd = idx.get("ytd_pct")
+            if ytd is not None:
+                line += f"  年初{_fmt_pct(ytd)}"
+            if idx["ticker"] in extended_tickers:
+                line = "· " + line   # 扩展指数缩进区分
+            lines.append(line)
         elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "\n".join(lines)}})
     else:
-        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**📊 三大指数** — 数据暂不可用"}})
+        elements.append({"tag": "div", "text": {"tag": "lark_md", "content": "**📊 指数行情** — 数据暂不可用"}})
 
     elements.append({"tag": "hr"})
 
@@ -542,7 +566,8 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, stor
     now_str = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
     elements.append({
         "tag": "div",
-        "text": {"tag": "lark_md", "content": f"生成时间: {now_str}"},
+        "text": {"tag": "lark_md",
+                 "content": f"生成时间: {now_str}\n[🌐 完整报告（网页版）]({PAGES_BASE_URL})"},
     })
 
     card = {
@@ -557,7 +582,153 @@ def build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, stor
     }
     return card
 
-# ---- 推送 ----
+# ---- HTML 报告 ----
+
+def _esc(s):
+    """HTML 转义"""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def _h_pct(pct):
+    """网页版涨跌幅：红涨绿跌（A 股配色），返回带 class 的 span"""
+    if pct is None:
+        return "<span class='flat'>--</span>"
+    cls = "up" if pct > 0 else ("down" if pct < 0 else "flat")
+    arrow = "▲" if pct > 0 else ("▼" if pct < 0 else "")
+    return f"<span class='{cls}'>{pct:+.2f}% {arrow}</span>"
+
+
+def _h_table(rows, headers):
+    """rows: list[list[str(HTML)]]; headers: list[str]"""
+    h = "<div class='tbl-wrap'><table><thead><tr>"
+    for hd in headers:
+        h += f"<th>{_esc(hd)}</th>"
+    h += "</tr></thead><tbody>"
+    for row in rows:
+        h += "<tr>" + "".join(f"<td>{c}</td>" for c in row) + "</tr>"
+    h += "</tbody></table></div>"
+    return h
+
+
+def build_html_report(indices, sectors, gainers, losers, adrs,
+                      bellwethers, storage, cpo, cloud):
+    """生成单文件 HTML 网页版早报（红涨绿跌，内联 CSS，移动端自适应）"""
+    bj_now = datetime.now(timezone(timedelta(hours=8)))
+    us_date = (bj_now - timedelta(days=1)).strftime("%Y-%m-%d")   # 报告覆盖的美股交易日
+    date_str = bj_now.strftime("%Y-%m-%d")
+    gen_time = bj_now.strftime("%Y-%m-%d %H:%M")
+
+    css = """
+    :root { --up:#e02020; --down:#0a8f4e; --flat:#666; --line:#e8e8ec;
+            --bg:#f5f6f8; --card:#fff; --txt:#222; --sub:#777; }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+           background:var(--bg); color:var(--txt); line-height:1.6; padding:16px; }
+    .wrap { max-width:860px; margin:0 auto; }
+    header { text-align:center; padding:20px 12px 8px; }
+    header h1 { font-size:22px; }
+    header .sub { color:var(--sub); font-size:13px; margin-top:4px; }
+    .idx-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+                 gap:10px; margin:16px 0; }
+    .idx-card { background:var(--card); border:1px solid var(--line); border-radius:10px;
+                padding:14px 12px; text-align:center; }
+    .idx-card .nm { font-size:13px; color:var(--sub); }
+    .idx-card .px { font-size:20px; font-weight:700; margin:2px 0; }
+    .idx-card .meta { font-size:12px; }
+    section { background:var(--card); border:1px solid var(--line); border-radius:10px;
+              padding:16px; margin:14px 0; }
+    section h2 { font-size:16px; margin-bottom:10px; border-left:4px solid #3b6fe0;
+                 padding-left:8px; }
+    .tbl-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { padding:7px 8px; text-align:left; border-bottom:1px solid var(--line);
+             white-space:nowrap; }
+    th { color:var(--sub); font-weight:600; background:#fafafa; }
+    tr:last-child td { border-bottom:none; }
+    td.num, th.num { text-align:right; }
+    .up { color:var(--up); font-weight:600; }
+    .down { color:var(--down); font-weight:600; }
+    .flat { color:var(--flat); }
+    .tag { display:inline-block; background:#eef2fb; color:#3b6fe0; border-radius:4px;
+           padding:0 6px; font-size:12px; }
+    footer { text-align:center; color:var(--sub); font-size:12px; padding:16px 0 30px; }
+    footer a { color:#3b6fe0; text-decoration:none; }
+    @media (max-width:480px) { body{padding:8px} .idx-card .px{font-size:17px} }
+    """
+
+    h = ["<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'>",
+         "<meta name='viewport' content='width=device-width,initial-scale=1'>",
+         f"<title>美股早报 {date_str}</title><style>{css}</style></head><body><div class='wrap'>"]
+
+    # 头部
+    h.append(f"<header><h1>📈 每日美股早报</h1>"
+             f"<div class='sub'>美股 {us_date}（美东）收盘 · 北京时间 {date_str} 推送</div></header>")
+
+    # 指数大卡片（四大指数）
+    majors = [i for i in (indices or []) if i["ticker"] in MAJOR_INDICES]
+    if majors:
+        h.append("<div class='idx-cards'>")
+        for i in majors:
+            ytd_html = _h_pct(i.get("ytd_pct"))
+            h.append(f"<div class='idx-card'><div class='nm'>{_esc(i['name'])}</div>"
+                     f"<div class='px'>{i['close']:,.2f}</div>"
+                     f"<div class='meta'>{_h_pct(i['change_pct'])} · 年初{ytd_html}</div></div>")
+        h.append("</div>")
+
+    # 一、指数详情（含扩展指数）
+    if indices:
+        rows = []
+        for i in indices:
+            rows.append([_esc(i["name"]),
+                         f"<span class='tag'>{_esc(i['ticker'])}</span>",
+                         f"{i['close']:,.2f}",
+                         _h_pct(i["change_pct"]),
+                         _h_pct(i.get("ytd_pct"))])
+        h.append("<section><h2>一、指数详情</h2>"
+                 + _h_table(rows, ["指数", "代码", "收盘", "日涨跌", "年初至今"])
+                 + "</section>")
+
+    # 二、板块表现
+    if sectors:
+        rows = [[_esc(s["name"]), f"<span class='tag'>{_esc(s['ticker'])}</span>",
+                 _h_pct(s["change_pct"])] for s in sectors]
+        h.append("<section><h2>二、板块表现（GICS 行业 ETF）</h2>"
+                 + _h_table(rows, ["板块", "代码", "日涨跌"]) + "</section>")
+
+    # 三/四、涨跌幅 Top 20
+    for title, items in (("三、涨幅 Top 20", gainers), ("四、跌幅 Top 20", losers)):
+        if items:
+            rows = []
+            for n, s in enumerate(items, 1):
+                nm = _esc(s.get("cn_name") or s["display_name"])
+                rows.append([str(n), nm, f"<span class='tag'>{_esc(s['symbol'])}</span>",
+                             _esc(s.get("sector") or ""), f"{s['price']:.2f}",
+                             _h_pct(s["change_pct"])])
+            h.append(f"<section><h2>{title}</h2>"
+                     + _h_table(rows, ["#", "公司", "代码", "板块", "价格($)", "涨跌幅"])
+                     + "</section>")
+
+    # 五~九、股票组（中概/风向标/存储/CPO/云计算）
+    groups = [
+        ("五、中概股行情", adrs), ("六、风向标", bellwethers),
+        ("七、存储概念股", storage), ("八、CPO 概念股（光电共封装）", cpo),
+        ("九、云计算厂商", cloud),
+    ]
+    for title, items in groups:
+        if items:
+            rows = [[_esc(s["name"]), f"<span class='tag'>{_esc(s['ticker'])}</span>",
+                     f"{s['close']:.2f}", _h_pct(s["change_pct"])] for s in items]
+            h.append(f"<section><h2>{title}</h2>"
+                     + _h_table(rows, ["名称", "代码", "价格($)", "涨跌幅"]) + "</section>")
+
+    # 页脚
+    h.append(f"<footer>生成时间 {gen_time} · 数据来源 Yahoo Finance · "
+             f"<a href='{PAGES_BASE_URL}'>历史报告存档</a><br>"
+             f"本报告仅供参考，不构成投资建议</footer>")
+
+    h.append("</div></body></html>")
+    return "".join(h)
 
 def send_to_feishu(card_data, webhook_url, max_retries=3):
     """发送卡片到飞书 Webhook，带重试"""
@@ -587,10 +758,12 @@ def send_to_feishu(card_data, webhook_url, max_retries=3):
 # ---- 主流程 ----
 
 def main():
-    parser = argparse.ArgumentParser(description="美股每日早报 - 飞书推送")
+    parser = argparse.ArgumentParser(description="美股每日早报 - 飞书推送 + 网页版报告")
     parser.add_argument("--dry-run", action="store_true", help="仅打印卡片内容，不发送")
     parser.add_argument("--force", action="store_true", help="强制运行（忽略周末）")
     parser.add_argument("--config", default=None, help="配置文件路径")
+    parser.add_argument("--html-dir", default=None,
+                        help="HTML 报告输出目录（默认脚本目录下 reports/，传空串禁用）")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -670,6 +843,24 @@ def main():
 
     # 构建卡片
     card = build_feishu_card(indices, sectors, gainers, losers, adrs, bellwethers, storage, cpo, cloud)
+
+    # 生成网页版报告（日期页 + index 覆盖为最新）
+    html_dir_arg = args.html_dir
+    html_dir = None if html_dir_arg == "" else (
+        Path(html_dir_arg) if html_dir_arg else SCRIPT_DIR / "reports")
+    if html_dir:
+        try:
+            html_dir.mkdir(parents=True, exist_ok=True)
+            html = build_html_report(indices, sectors, gainers, losers, adrs,
+                                     bellwethers, storage, cpo, cloud)
+            date_str = datetime.now(timezone(timedelta(hours=8))).strftime("%Y-%m-%d")
+            dated = html_dir / f"{date_str}.html"
+            index_page = html_dir / "index.html"
+            dated.write_text(html, encoding="utf-8")
+            index_page.write_text(html, encoding="utf-8")
+            log.info("网页版报告已生成: %s (index.html 同步更新)", dated)
+        except Exception as e:
+            log.warning("网页版报告生成失败（不影响飞书推送）: %s", e)
 
     if args.dry_run:
         print("\n" + "=" * 60)

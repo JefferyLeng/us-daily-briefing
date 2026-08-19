@@ -7,3 +7,5 @@ __pycache__/
 .DS_Store
 *.log
 sent_tweets.json
+reports/
+sent_trendforce.json
