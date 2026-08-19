@@ -9,3 +9,4 @@ __pycache__/
 sent_tweets.json
 reports/
 sent_trendforce.json
+ashare_reports/

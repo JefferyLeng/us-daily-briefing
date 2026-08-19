@@ -1,0 +1,47 @@
+name: A-Share Daily Review
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # 允许部署网页报告到 gh-pages 分支
+
+jobs:
+  send-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run review script
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+        run: |
+          # 从 secret 生成 config.json
+          python3 -c "
+          import json, os
+          cfg = {}
+          if os.path.exists('config.json'):
+              with open('config.json', 'r') as f:
+                  cfg = json.load(f)
+          cfg['feishu_webhook_url'] = os.environ['FEISHU_WEBHOOK_URL']
+          with open('config.json', 'w') as f:
+              json.dump(cfg, f, ensure_ascii=False, indent=2)
+          "
+          python3 ashare_daily_review.py --force
+
+      - name: Deploy web report to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./ashare_reports
+          destination_dir: ashare
+          keep_files: true          # 保留美股报告与历史日期页
+          commit_message: "ashare report: ${{ github.run_id }}"
