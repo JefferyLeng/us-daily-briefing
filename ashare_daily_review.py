@@ -55,6 +55,8 @@ SINA_INDEX_CODES = {
     "000905": "sh000905", "000852": "sh000852", "000016": "sh000016",
     "000922": "sh000922", "399106": "sz399106",
 }
+# 腾讯行情同样用 sh/sz/bj 前缀，与新浪一致
+QT_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 
 def load_config(path=None):
@@ -93,11 +95,97 @@ def _num(v):
 # 数据采集（每个模块独立容错，失败不拖垮整份报告）
 # ============================================================
 
-def fetch_indices(date_compact):
-    """指数收盘：东财优先（一次含涨跌/YTD/成交额），整体失败回退新浪。
+def _tencent_quotes(prefixed_codes):
+    """腾讯批量行情：返回 {去前缀代码: fields_list}，字段含收盘/昨收/涨跌%/时间戳/全市场额。"""
+    url = "http://qt.gtimg.cn/q=" + ",".join(prefixed_codes)
+    r = requests.get(url, headers=QT_HEADERS, timeout=10)
+    txt = r.content.decode("gbk", errors="ignore")
+    out = {}
+    for line in txt.strip().split(";"):
+        line = line.strip()
+        if not line or "=" not in line or "~" not in line:
+            continue
+        var, val = line.split("=", 1)
+        f = val.strip('"').split("~")
+        if len(f) < 40:
+            continue
+        code = var.split("_")[-1]          # v_sh000001 → sh000001
+        out[code] = f
+    return out
 
-    返回 (list[dict], trading_today)。东财路径下上证无当日K线视为休市。
+
+def _tencent_kline_ytd_base(prefixed_code, year):
+    """腾讯日K：返回年初首个收盘价（YTD 基准），失败返回 None。"""
+    url = (f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
+           f"?param={prefixed_code},day,{year}-01-01,,640,qfq")
+    r = requests.get(url, headers=QT_HEADERS, timeout=10)
+    node = r.json().get("data", {}).get(prefixed_code, {})
+    arr = node.get("qfqday") or node.get("day") or []
+    if not arr:
+        return None
+    try:
+        return float(arr[0][2])
+    except (ValueError, IndexError):
+        return None
+
+
+def _fetch_indices_tencent(date_compact):
+    """腾讯主源：v_ 行情(收盘/昨收/涨跌%/全市场额) + K线算 YTD。
+
+    腾讯接口对数据中心 IP 稳定（a-stock-data 评级零封禁风险）。
+    返回 (list[dict], trading_today) 或 (None, None) 表示本源不可用。
     """
+    year = date_compact[:4]
+    results = []
+    try:
+        quotes = _retry(lambda: _tencent_quotes(list(SINA_INDEX_CODES.values())))
+    except Exception as e:
+        log.warning("[指数] 腾讯行情失败: %s", e)
+        return None, None
+
+    trading_today = False
+    for code, name in ASHARE_INDICES.items():
+        prefixed = SINA_INDEX_CODES.get(code)
+        f = quotes.get(prefixed) if prefixed else None
+        if not f:
+            log.warning("[指数] %s 腾讯无行情，跳过", name)
+            continue
+        try:
+            ts = f[30][:8]
+            if code == "000001":
+                trading_today = (ts == date_compact)
+                if not trading_today:
+                    return [], False    # 休市（时间戳非当日）
+            close = float(f[3])
+            prev = float(f[4])
+            amount = float(f[35].split("/")[2])
+            ytd_base = _tencent_kline_ytd_base(prefixed, year)
+            results.append({
+                "name": name,
+                "code": code,
+                "close": round(close, 2),
+                "change_pct": round((close - prev) / prev * 100, 2),
+                "ytd_pct": (round((close - ytd_base) / ytd_base * 100, 2)
+                            if ytd_base else None),
+                "amount": amount,
+            })
+        except Exception as e:
+            log.warning("[指数] %s 腾讯解析失败: %s", name, e)
+    return results, trading_today
+
+
+def fetch_indices(date_compact):
+    """指数收盘三级源：腾讯(主) → 东财 → 新浪。
+
+    返回 (list[dict], trading_today)。上证无当日数据视为休市。
+    """
+    # ---- 主源：腾讯 ----
+    res, trading = _fetch_indices_tencent(date_compact)
+    if res is not None:
+        log.info("[指数] 使用腾讯源，%d 只", len(res))
+        return res, trading
+
+    # ---- 次源：东财 ----
     year = date_compact[:4]
 
     # ---- 主源：东财 ----
@@ -177,10 +265,11 @@ def fetch_indices(date_compact):
 
 
 def fetch_total_amount(date_compact):
-    """两市成交额（上证综指 + 深证综指，全口径），含昨日值算环比。
+    """两市成交额（上证综指 + 深证综指，全口径）。
 
-    东财失败回退新浪 spot（仅当日值，无环比）。
+    东财（含昨日环比）→ 腾讯（仅当日）→ 新浪 spot 三级回退。
     """
+    # ---- 次源：东财（唯一能拿到昨日成交额算环比的源）----
     total, prev_total = 0.0, 0.0
     ok = False
     for code, name in (("000001", "上证指数"), AMOUNT_AUX_INDEX):
@@ -202,7 +291,17 @@ def fetch_total_amount(date_compact):
     if ok:
         return total, prev_total
 
-    # 回退：新浪 spot（当日成交额，无昨日环比）
+    # ---- 主回退：腾讯（当日成交额，无环比）----
+    try:
+        quotes = _retry(lambda: _tencent_quotes(["sh000001", "sz399106"]))
+        total = sum(float(f[35].split("/")[2]) for f in quotes.values())
+        if total > 0:
+            log.info("[成交额] 使用腾讯回退")
+            return total, 0.0
+    except Exception as e:
+        log.warning("[成交额] 腾讯回退失败: %s", e)
+
+    # ---- 末级：新浪 spot ----
     try:
         spot = _retry(ak.stock_zh_index_spot_sina)
         amt = {str(r["代码"]): _num(r.get("成交额")) or 0.0 for _, r in spot.iterrows()}
