@@ -131,8 +131,13 @@ def _fmt_pct(pct):
 # ---- 数据获取 ----
 
 def fetch_indices():
-    """获取港股主要指数（逐个下载，含重试）"""
+    """获取港股主要指数（逐个下载，含重试）。
+
+    返回 (results, last_bar_date)；last_bar_date 为全部指数中最新的K线日期，
+    用于动态判断港股是否休市（节假日/台风）。
+    """
     results = []
+    last_dates = []
     for ticker, name in HK_INDICES.items():
         for attempt in range(3):
             try:
@@ -155,11 +160,16 @@ def fetch_indices():
                     "close": round(last, 2),
                     "change_pct": round(change_pct, 2),
                 })
+                try:
+                    last_dates.append(data.index[-1].date())
+                except Exception:
+                    pass
                 break
             except Exception as e:
                 log.warning("获取指数 %s 失败 (attempt %d): %s", name, attempt + 1, e)
                 time.sleep(3)
-    return results if results else None
+    last_bar_date = max(last_dates) if last_dates else None
+    return (results if results else None), last_bar_date
 
 
 def fetch_sector_performance():
@@ -394,11 +404,41 @@ def main():
     log.info("开始获取港股数据... (时段: %s)", session)
 
     indices = None
+    indices_last_date = None
     try:
-        indices = fetch_indices()
+        indices, indices_last_date = fetch_indices()
         log.info("指数数据: %d 条", len(indices) if indices else 0)
     except Exception as e:
         log.error("获取指数数据失败: %s", e)
+
+    # 动态休市判定：最后K线日期 < 今日（香港时区工作日）→ 港股休市
+    if indices_last_date is not None:
+        from zoneinfo import ZoneInfo
+        from market_holidays import holiday_name
+        hkt = datetime.now(timezone(timedelta(hours=8))).astimezone(ZoneInfo("Asia/Hong_Kong"))
+        expected = hkt.date()
+        while expected.weekday() >= 5:
+            expected -= timedelta(days=1)
+        if indices_last_date < expected:
+            reason = holiday_name("HK", expected.isoformat()) or "休市（节假日或台风）"
+            log.info("港股休市: %s（最后K线 %s < 预期 %s）",
+                     reason, indices_last_date, expected)
+            if config.get("holiday_notice", True):
+                card = {"msg_type": "interactive", "card": {
+                    "header": {"title": {"tag": "plain_text",
+                                         "content": f"🇭🇰 港股简报 · {expected.isoformat()}"},
+                               "template": "grey"},
+                    "elements": [{"tag": "div", "text": {"tag": "lark_md", "content":
+                        f"**今日港股休市：{reason}**\n最近一个交易日：{indices_last_date.isoformat()}\n恢复交易后推送自动恢复"}}],
+                }}
+                if args.dry_run:
+                    print(json.dumps(card, ensure_ascii=False, indent=2))
+                    return
+                if webhook_url:
+                    send_to_feishu(card, webhook_url)
+            else:
+                log.info("holiday_notice=false，静默跳过")
+            return
 
     sectors = None
     try:

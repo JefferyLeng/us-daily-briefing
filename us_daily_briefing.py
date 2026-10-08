@@ -220,6 +220,7 @@ def fetch_major_indices():
 
     用 period="ytd" 一次下载，同时算出日涨跌（收盘 vs 前收）和
     年初至今涨跌（收盘 vs 年内首个收盘）。
+    返回 (results, last_bar_date)；last_bar_date 用于动态判断美股是否休市。
     """
     all_indices = {**MAJOR_INDICES, **EXTENDED_INDICES}
     # 回退标的（如 ^HXC 的 PGJ）一并下载，主代码无数据时启用
@@ -227,7 +228,11 @@ def fetch_major_indices():
     tickers = list(all_indices.keys()) + [fb for fb, _ in fallback_map.values()]
     data = yf.download(tickers, period="ytd", progress=False, auto_adjust=True)
     if data.empty:
-        return None
+        return None, None
+    try:
+        last_bar_date = data.index[-1].date()
+    except Exception:
+        last_bar_date = None
 
     results = []
     for ticker, name in all_indices.items():
@@ -258,7 +263,7 @@ def fetch_major_indices():
             })
         except Exception as e:
             log.warning("获取指数 %s 失败: %s", name, e)
-    return results
+    return results, last_bar_date
 
 
 def fetch_sector_performance():
@@ -758,6 +763,28 @@ def send_to_feishu(card_data, webhook_url, max_retries=3):
 
 # ---- 主流程 ----
 
+def _expected_us_trade_date(now_bj):
+    """推送时刻（北京时间早上）对应的最近一个美股预期交易日（周一~周五，美东时区）。"""
+    from zoneinfo import ZoneInfo
+    et = now_bj.astimezone(ZoneInfo("America/New_York"))
+    d = et.date()
+    while d.weekday() >= 5:
+        d -= timedelta(days=1)
+    return d
+
+
+def build_holiday_card(reason, date_str, last_session):
+    """美股休市通知卡片"""
+    last_txt = f"\n最近一个交易日：{last_session}" if last_session else ""
+    return {"msg_type": "interactive", "card": {
+        "header": {"title": {"tag": "plain_text",
+                             "content": f"📈 每日美股早报 · {date_str}"},
+                   "template": "grey"},
+        "elements": [{"tag": "div", "text": {"tag": "lark_md", "content":
+            f"**今日美股休市：{reason}**{last_txt}\n行情数据暂停一天，恢复交易后推送自动恢复"}}],
+    }}
+
+
 def main():
     parser = argparse.ArgumentParser(description="美股每日早报 - 飞书推送 + 网页版报告")
     parser.add_argument("--dry-run", action="store_true", help="仅打印卡片内容，不发送")
@@ -784,11 +811,33 @@ def main():
     log.info("开始获取美股数据...")
 
     indices = None
+    indices_last_date = None
     try:
-        indices = fetch_major_indices()
+        indices, indices_last_date = fetch_major_indices()
         log.info("指数数据: %d 条", len(indices) if indices else 0)
     except Exception as e:
         log.error("获取指数数据失败: %s", e)
+
+    # 动态休市判定：最后K线日期 < 预期交易日 → 美股休市（节假日）
+    if indices_last_date is not None:
+        now_bj = datetime.now(timezone(timedelta(hours=8)))
+        expected = _expected_us_trade_date(now_bj)
+        if indices_last_date < expected:
+            from market_holidays import holiday_name
+            reason = holiday_name("US", expected.isoformat()) or "美股休市"
+            log.info("美股休市: %s（最后K线 %s < 预期 %s）",
+                     reason, indices_last_date, expected)
+            if config.get("holiday_notice", True):
+                card = build_holiday_card(reason, now_bj.strftime("%Y-%m-%d"),
+                                          indices_last_date.isoformat())
+                if args.dry_run:
+                    print(json.dumps(card, ensure_ascii=False, indent=2))
+                    return
+                if webhook_url:
+                    send_to_feishu(card, webhook_url)
+            else:
+                log.info("holiday_notice=false，静默跳过")
+            return
 
     sectors = None
     try:

@@ -832,10 +832,22 @@ def build_html_report(indices, activity, zt, zb_count, dt_count,
 # 主流程
 # ============================================================
 
+def build_holiday_card(reason, date_str):
+    """休市通知卡片"""
+    return {"msg_type": "interactive", "card": {
+        "header": {"title": {"tag": "plain_text",
+                             "content": f"📉 A股每日复盘 · {date_str}"},
+                   "template": "grey"},
+        "elements": [{"tag": "div", "text": {"tag": "lark_md", "content":
+            f"**今日休市：{reason}**\n行情数据暂停一天，节后恢复交易时推送自动恢复"}}],
+    }}
+
+
 def main():
     parser = argparse.ArgumentParser(description="A股每日全景复盘 - 飞书推送 + 网页报告")
     parser.add_argument("--dry-run", action="store_true", help="仅打印卡片内容，不发送")
-    parser.add_argument("--force", action="store_true", help="强制运行（忽略休市判断）")
+    parser.add_argument("--force", action="store_true",
+                        help="强制运行（仅绕过周末预判；休市以行情日期为准，仍会发休市通知）")
     parser.add_argument("--config", default=None, help="配置文件路径")
     parser.add_argument("--html-dir", default=None,
                         help="HTML 输出目录（默认脚本目录下 ashare_reports/，传空串禁用）")
@@ -843,6 +855,7 @@ def main():
 
     config = load_config(args.config)
     webhook_url = config.get("feishu_webhook_url", "")
+    holiday_notice = config.get("holiday_notice", True)
 
     now = datetime.now(CST)
     date_str = now.strftime("%Y-%m-%d")
@@ -856,8 +869,20 @@ def main():
 
     # ---- 采集 ----
     indices, trading_today = fetch_indices(date_compact)
-    if not trading_today and not args.force:
-        log.info("今日(%s)无上证K线，判定休市，跳过推送", date_str)
+    if not trading_today:
+        # 动态休市判定（上证行情日期 != 今日），与 --force 无关
+        from market_holidays import holiday_name
+        reason = holiday_name("CN", date_str) or "非交易日"
+        log.info("今日(%s)休市：%s", date_str, reason)
+        if not holiday_notice:
+            log.info("holiday_notice=false，静默跳过")
+            return
+        card = build_holiday_card(reason, date_str)
+        if args.dry_run:
+            print(json.dumps(card, ensure_ascii=False, indent=2))
+            return
+        if webhook_url:
+            send_to_feishu(card, webhook_url)
         return
 
     total_amount, prev_total_amount = fetch_total_amount(date_compact)
