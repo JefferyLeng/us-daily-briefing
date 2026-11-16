@@ -75,7 +75,11 @@ def load_config(path=None):
 # ============================================================
 
 def load_trade_calendar():
-    """交易日历（新浪源，一年缓存到本地）。返回 set[date]。"""
+    """交易日历（新浪源，一年缓存到本地）。返回 set[date]。
+
+    akshare >= 1.20.45 将 tool_trade_date_hist_sina 改名为
+    calendar_trade_date_hist_sina，两个名字都尝试（本地旧版/线上新版兼容）。
+    """
     cache = SCRIPT_DIR / "trade_calendar.json"
     this_year = datetime.now(CST).year
     if cache.exists():
@@ -85,7 +89,19 @@ def load_trade_calendar():
                 return {date.fromisoformat(d) for d in data.get("dates", [])}
         except Exception:
             pass
-    df = ak.tool_trade_date_hist_sina()
+    df = None
+    for fn_name in ("calendar_trade_date_hist_sina",   # 新名（akshare ≥1.20.45）
+                    "tool_trade_date_hist_sina"):        # 旧名
+        fn = getattr(ak, fn_name, None)
+        if fn is None:
+            continue
+        try:
+            df = fn()
+            break
+        except Exception as e:
+            log.info("[日历] %s 调用失败: %s", fn_name, e)
+    if df is None or df.empty:
+        raise RuntimeError("交易日历接口均不可用（新/旧名都失败）")
     dates = {d if isinstance(d, date) else d.date() for d in df["trade_date"]}
     try:
         cache.write_text(json.dumps(
@@ -396,10 +412,19 @@ def main():
     else:
         try:
             calendar = load_trade_calendar()
+            win = holiday_window(today, calendar)
         except Exception as e:
-            log.error("交易日历获取失败: %s", e)
-            return
-        win = holiday_window(today, calendar)
+            # 日历不可用 → 降级为周末规则（周一~周五视为交易日）
+            # 覆盖最常见的周日晚场景；长假（周中的法定节假日）无法判定，跳过
+            log.warning("交易日历获取失败(%s)，降级为周末规则", e)
+            if today.weekday() != 6:   # 6=周日
+                log.info("今日(%s)非周日，静默退出", today)
+                return
+            baseline = today - timedelta(days=2)
+            while baseline.weekday() >= 5:
+                baseline -= timedelta(days=1)
+            span = 2
+            win = (baseline, span)
         if not win:
             log.info("今日(%s)不是假期最后一天，静默退出", today)
             return
